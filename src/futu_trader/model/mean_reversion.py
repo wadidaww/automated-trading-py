@@ -28,7 +28,7 @@ class MeanReversionModel(ISignalModel):
         confidence = min(abs(z_score) / 3.0, 1.0)
         return Prediction(signal=signal, confidence=confidence, metadata={"z_score": z_score})
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> None:  # noqa: ANN001
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
         """No-op for rule model."""
 
     def save(self, path: str) -> None:

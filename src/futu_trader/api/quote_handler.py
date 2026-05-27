@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 
 @dataclass(slots=True)
@@ -29,4 +29,4 @@ class QuoteHandler:
             symbol: Symbol code.
             price: Last traded price.
         """
-        await self.queue.put(QuoteEvent(symbol=symbol, price=price, timestamp=datetime.utcnow()))
+        await self.queue.put(QuoteEvent(symbol=symbol, price=price, timestamp=datetime.now(tz=UTC)))

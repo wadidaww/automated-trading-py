@@ -2,6 +2,9 @@ name: Paper Trade
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   paper:
     runs-on: ubuntu-latest

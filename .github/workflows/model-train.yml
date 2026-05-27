@@ -11,6 +11,9 @@ on:
       model_type:
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   train:
     runs-on: ubuntu-latest

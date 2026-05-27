@@ -60,9 +60,11 @@ class RiskEngine:
             return RiskDecision(False, "daily_loss_limit")
         if inp.open_orders >= self.max_open_orders:
             return RiskDecision(False, "open_orders_limit")
-        concentration = (inp.current_symbol_notional_minor + proposed_notional) / max(
-            inp.portfolio_value_minor, 1
-        )
+        if inp.portfolio_value_minor <= 0:
+            return RiskDecision(False, "zero_portfolio_value")
+        concentration = (
+            inp.current_symbol_notional_minor + proposed_notional
+        ) / inp.portfolio_value_minor
         if concentration > self.concentration_limit_pct:
             return RiskDecision(False, "concentration_limit")
         elapsed_ms = (perf_counter() - started) * 1000

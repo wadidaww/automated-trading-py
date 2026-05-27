@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 
 @dataclass(slots=True)
@@ -36,7 +36,7 @@ class TradeHandler:
     async def on_order(self, order_id: str, status: str) -> None:
         """Emit order update event."""
         await self.queue.put(
-            OrderUpdateEvent(order_id=order_id, status=status, timestamp=datetime.utcnow())
+            OrderUpdateEvent(order_id=order_id, status=status, timestamp=datetime.now(tz=UTC))
         )
 
     async def on_fill(self, order_id: str, symbol: str, quantity: int, price_minor: int) -> None:
@@ -47,6 +47,6 @@ class TradeHandler:
                 symbol=symbol,
                 quantity=quantity,
                 price_minor=price_minor,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(tz=UTC),
             )
         )

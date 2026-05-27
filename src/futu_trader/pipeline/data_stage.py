@@ -13,6 +13,7 @@ class FeatureWindow:
 
     symbol: str
     price: float
+    z_score: float
 
 
 class DataStage:
@@ -20,4 +21,5 @@ class DataStage:
 
     async def process(self, item: QuoteEvent) -> FeatureWindow:
         """Process input event."""
-        return FeatureWindow(symbol=item.symbol, price=item.price)
+        z_score = (item.price - 100.0) / 10.0
+        return FeatureWindow(symbol=item.symbol, price=item.price, z_score=z_score)

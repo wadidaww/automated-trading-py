@@ -29,7 +29,7 @@ class SignalStage:
 
     async def process(self, item: FeatureWindow) -> TradeSignal | None:
         """Generate trade signal."""
-        prediction = self.model.predict(pd.DataFrame({"z_score": [0.0]}))
+        prediction = self.model.predict(pd.DataFrame({"z_score": [item.z_score]}))
         if prediction.confidence < self.confidence_threshold:
             return None
         return TradeSignal(
