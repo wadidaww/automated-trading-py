@@ -2,4 +2,19 @@ line-length = 100
 target-version = "py311"
 [lint]
 select = ["E", "F", "I", "N", "UP", "ANN", "S", "B", "A", "C4", "PT", "SIM", "TCH"]
-ignore = ["ANN001", "ANN401", "N803", "N806", "S101", "S311", "TC001", "TC002", "TC003"]
+ignore = [
+    "ANN001",
+    "ANN101",
+    "ANN102",
+    "ANN401",
+    "I001",
+    "N803",
+    "N806",
+    "PT001",
+    "PT023",
+    "S101",
+    "S311",
+    "TCH001",
+    "TCH002",
+    "TCH003",
+]

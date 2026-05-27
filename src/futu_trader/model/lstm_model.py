@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 
-class LSTMNet(nn.Module):  # type: ignore[misc]
+class LSTMNet(nn.Module):
     """Simple LSTM classifier."""
 
     def __init__(

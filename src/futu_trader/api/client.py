@@ -172,9 +172,7 @@ class FutuClient:
             await self.connect()
 
     @staticmethod
-    def _extract_row_value(
-        payload: pd.DataFrame, columns: tuple[str, ...], fallback: str
-    ) -> str:
+    def _extract_row_value(payload: pd.DataFrame, columns: tuple[str, ...], fallback: str) -> str:
         """Get first non-null value from candidate columns."""
         for column in columns:
             if column in payload.columns:
