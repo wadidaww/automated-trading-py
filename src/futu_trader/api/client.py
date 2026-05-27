@@ -15,7 +15,6 @@ from futu import (
     OpenQuoteContext,
     OpenSecTradeContext,
     OrderType,
-    TrdEnv,
     TrdSide,
 )
 from pydantic import BaseModel
@@ -33,6 +32,10 @@ class OrderResponse(BaseModel):
 
     order_id: str
     status: str
+
+
+MARKET_ORDER_PRICE = 0.0
+DEFAULT_ACCOUNT_ID = 0
 
 
 @dataclass
@@ -75,9 +78,10 @@ class FutuClient:
         rate_limit_requests: int = 300,
         rate_limit_window_s: int = 30,
         trade_market: str = "HK",
-        trd_env: str = TrdEnv.SIMULATE,
+        trd_env: str = "SIMULATE",
         acc_id: int | None = None,
         allow_paper_fallback: bool = True,
+        connection_timeout_s: float = 0.2,
     ) -> None:
         self.host = host
         self.port = port
@@ -87,6 +91,7 @@ class FutuClient:
         self.trd_env = trd_env
         self.acc_id = acc_id
         self.allow_paper_fallback = allow_paper_fallback
+        self.connection_timeout_s = connection_timeout_s
         self._connected = False
         self._paper_fallback = False
         self._heartbeat_task: asyncio.Task[None] | None = None
@@ -109,7 +114,8 @@ class FutuClient:
         if self.allow_paper_fallback:
             try:
                 _, writer = await asyncio.wait_for(
-                    asyncio.open_connection(self.host, self.port), timeout=0.2
+                    asyncio.open_connection(self.host, self.port),
+                    timeout=self.connection_timeout_s,
                 )
                 writer.close()
                 await writer.wait_closed()
@@ -173,7 +179,7 @@ class FutuClient:
         for column in columns:
             if column in payload.columns:
                 value = payload[column].iloc[0]
-                if value is not None:
+                if pd.notna(value):
                     return str(value)
         return fallback
 
@@ -190,8 +196,6 @@ class FutuClient:
         await self._ensure_connected()
         if self._paper_fallback or self._quote_ctx is None:
             return QuoteResponse(symbol=symbol, price=100.0)
-        if self._quote_ctx is None:
-            raise RuntimeError("quote context unavailable")
         ret, payload = await asyncio.to_thread(self._quote_ctx.get_market_snapshot, [symbol])
         if ret != RET_OK:
             raise RuntimeError(str(payload))
@@ -219,31 +223,28 @@ class FutuClient:
         """
         if qty <= 0:
             raise ValueError("qty must be positive")
-        side_value = side.upper()
+        side_upper = side.upper()
         side_map = {"BUY": TrdSide.BUY, "SELL": TrdSide.SELL}
-        if side_value not in side_map:
+        if side_upper not in side_map:
             raise ValueError("side must be BUY or SELL")
         await self._bucket.acquire()
         await self._ensure_connected()
         if self._paper_fallback or self._trade_ctx is None:
-            return OrderResponse(order_id=f"{symbol}-{side_value}-{qty}", status="SUBMITTED")
-        if self._trade_ctx is None:
-            raise RuntimeError("trade context unavailable")
-        quote = await self.get_quote(symbol)
+            return OrderResponse(order_id=f"{symbol}-{side}-{qty}", status="SUBMITTED")
         ret, payload = await asyncio.to_thread(
             self._trade_ctx.place_order,
-            quote.price,
+            MARKET_ORDER_PRICE,
             qty,
             symbol,
-            side_map[side_value],
-            order_type=OrderType.NORMAL,
+            side_map[side_upper],
+            order_type=OrderType.MARKET,
             trd_env=self.trd_env,
-            acc_id=0 if self.acc_id is None else self.acc_id,
+            acc_id=DEFAULT_ACCOUNT_ID if self.acc_id is None else self.acc_id,
         )
         if ret != RET_OK:
             raise RuntimeError(str(payload))
         if payload.empty:
             raise RuntimeError("empty order response")
-        order_id = self._extract_row_value(payload, ("order_id",), f"{symbol}-{side_value}-{qty}")
+        order_id = self._extract_row_value(payload, ("order_id",), f"{symbol}-{side}-{qty}")
         status = self._extract_row_value(payload, ("order_status",), "SUBMITTED")
         return OrderResponse(order_id=order_id, status=status)
