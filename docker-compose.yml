@@ -1,0 +1,24 @@
+version: "3.9"
+services:
+  futu-trader:
+    build: .
+    command: ["--mode", "paper", "--config", "config/config.dev.yaml"]
+    environment:
+      FUTU_ACCOUNT_ID: ${FUTU_ACCOUNT_ID:-paper-account}
+    depends_on:
+      - mock-opend
+  mock-opend:
+    image: python:3.11-slim
+    command: ["python", "-m", "http.server", "11111"]
+    ports:
+      - "11111:11111"
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+  redis:
+    image: redis:7-alpine

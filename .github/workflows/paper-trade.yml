@@ -1,0 +1,12 @@
+name: Paper Trade
+on:
+  workflow_dispatch:
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d mock-opend
+      - run: python -m futu_trader --mode paper --duration 60
+      - run: docker compose down
