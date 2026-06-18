@@ -15,10 +15,16 @@ def parse_args() -> argparse.Namespace:
         argparse.Namespace: Parsed args.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", default="paper")
-    parser.add_argument("--duration", type=int, default=5)
-    parser.add_argument("--health-check", action="store_true")
-    parser.add_argument("--config", default="config/config.dev.yaml")
+    parser.add_argument("--mode", default="paper", help="Trading mode: paper or live.")
+    parser.add_argument(
+        "--duration", type=int, default=5, help="Duration to run the pipeline in seconds."
+    )
+    parser.add_argument(
+        "--health-check", action="store_true", help="Perform a health check and exit."
+    )
+    parser.add_argument(
+        "--config", default="config/config.dev.yaml", help="Path to the configuration file."
+    )
     return parser.parse_args()
 
 
