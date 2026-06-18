@@ -69,3 +69,15 @@ Use `deploy-prod.yml` workflow with environment approval to build and deploy ima
 ## Risk disclaimer
 
 Trading involves substantial risk of loss. Use paper trading and staged deployment before any live capital deployment. Ensure compliance with local laws and broker terms.
+
+## Conda setup
+
+conda install --name base "conda>=26.5"
+conda install --name base conda-pypi
+<!-- conda create --name futunn --clone base -->
+conda pypi install futu-api
+conda list futu-api
+
+conda config --set solver rattler
+conda config --append channels conda-pypi
+conda config --set channel_priority flexible
