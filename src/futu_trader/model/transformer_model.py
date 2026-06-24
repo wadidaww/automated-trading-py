@@ -165,8 +165,8 @@ class TransformerPriceModel(ISignalModel):
             confidence=confidence,
             metadata={
                 "probabilities": {
-                    signal.value: float(probabilities[position].item())
-                    for position, signal in enumerate(SIGNALS)
+                    signal.value: float(probabilities[signal_index].item())
+                    for signal_index, signal in enumerate(SIGNALS)
                 },
                 "window_size": self.config.window_size,
                 "model": "transformer_price",
@@ -231,8 +231,10 @@ class TransformerPriceModel(ISignalModel):
         if len(features) >= self.config.window_size:
             return features[-self.config.window_size :]
 
-        padding = features.new_zeros((self.config.window_size - len(features), features.shape[1]))
-        return torch.cat((padding, features), dim=0)
+        zero_padding = features.new_zeros(
+            (self.config.window_size - len(features), features.shape[1])
+        )
+        return torch.cat((zero_padding, features), dim=0)
 
     def _build_training_windows(
         self, features: torch.Tensor, targets: torch.Tensor
