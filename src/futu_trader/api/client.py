@@ -8,8 +8,6 @@ import random
 import time
 from dataclasses import dataclass
 from typing import Any
-from typesafe.payload import Payload
-
 from futu import (
     OpenQuoteContext,
     OpenSecTradeContext,
@@ -19,7 +17,9 @@ from futu import (
     TrdSide,
 )
 from pydantic import BaseModel, validate_call, Field
-from utils.dataframe import Extractor
+
+from futu_trader.api.typesafe.payload import Payload
+from futu_trader.utils.dataframe import Extractor
 
 
 class QuoteResponse(BaseModel):
