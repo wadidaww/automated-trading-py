@@ -39,8 +39,7 @@ class PositionalEncoding(nn.Module):
 
     def __init__(self, window_size: int, hidden_size: int) -> None:
         super().__init__()
-        self.embedding = nn.Parameter(torch.zeros(1, window_size, hidden_size))
-        nn.init.normal_(self.embedding, mean=0.0, std=0.02)
+        self.embedding = nn.Parameter(torch.randn(1, window_size, hidden_size) * 0.02)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Add position embeddings to projected feature windows."""
@@ -119,7 +118,8 @@ class TransformerPriceModel(ISignalModel):
     def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
         """Train the transformer classifier on rolling feature windows."""
         features = self._prepare_features(X, fit=True)
-        targets = torch.tensor([self._target_to_index(value) for value in y], dtype=torch.long)
+        target_indexes = y.map(self._target_to_index).to_numpy(dtype="int64")
+        targets = torch.tensor(target_indexes, dtype=torch.long)
         windows, labels = self._build_training_windows(features, targets)
 
         self._build_net()
@@ -243,12 +243,10 @@ class TransformerPriceModel(ISignalModel):
             msg = "features and targets must have the same number of rows"
             raise ValueError(msg)
 
-        windows = []
-        labels = []
+        windows = features.new_zeros((len(features), self.config.window_size, features.shape[1]))
         for index in range(len(features)):
-            windows.append(self._latest_window(features[: index + 1]))
-            labels.append(targets[index])
-        return torch.stack(windows), torch.stack(labels)
+            windows[index] = self._latest_window(features[: index + 1])
+        return windows, targets
 
     @staticmethod
     def _target_to_index(value: object) -> int:

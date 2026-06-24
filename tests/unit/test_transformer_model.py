@@ -41,6 +41,7 @@ def test_transformer_predict_returns_signal_probabilities() -> None:
 
 def test_transformer_fit_and_round_trip(tmp_path: Path) -> None:
     model = TransformerPriceModel(
+        input_size=3,
         window_size=3,
         hidden_size=8,
         num_heads=2,
@@ -51,8 +52,13 @@ def test_transformer_fit_and_round_trip(tmp_path: Path) -> None:
         seed=7,
     )
     labels = pd.Series([-1, 0, 1, 1, 0, -1, 0, 1])
+    assert model.net is not None
+    initial_head = model.net.head.weight.detach().clone()
 
     model.fit(_features(), labels)
+    assert model.net is not None
+    assert not torch.allclose(initial_head, model.net.head.weight)
+
     path = tmp_path / "transformer.pt"
     model.save(str(path))
 
