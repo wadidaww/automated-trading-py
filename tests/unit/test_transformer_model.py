@@ -49,7 +49,6 @@ def test_transformer_fit_and_round_trip(tmp_path: Path) -> None:
         dropout=0.0,
         epochs=1,
         batch_size=2,
-        seed=7,
     )
     labels = pd.Series([Signal.SELL, "HOLD", Signal.BUY, "BUY", 0, -1, "HOLD", 1])
     assert model.net is not None

@@ -268,10 +268,14 @@ class TransformerPriceModel(ISignalModel):
             try:
                 return SIGNAL_TO_INDEX[Signal(value.upper())]
             except ValueError as exc:
-                msg = f"invalid target signal string: {value!r}"
+                valid_values = ", ".join(signal.value for signal in SIGNALS)
+                msg = f"invalid target signal string: {value!r}. Valid values are: {valid_values}"
                 raise ValueError(msg) from exc
         if isinstance(value, int) and value in INTEGER_TO_SIGNAL:
             return SIGNAL_TO_INDEX[INTEGER_TO_SIGNAL[value]]
 
-        msg = "target values must be Signal, signal strings, or -1/0/1 integers"
+        msg = (
+            "target values must be Signal, signal strings, or -1/0/1 integers, "
+            f"got {value!r} of type {type(value).__name__}"
+        )
         raise ValueError(msg)
