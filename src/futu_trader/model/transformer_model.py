@@ -255,9 +255,9 @@ class TransformerPriceModel(ISignalModel):
             msg = "features and targets must have the same number of rows"
             raise ValueError(msg)
 
-        windows = features.new_zeros((len(features), self.config.window_size, features.shape[1]))
-        for index in range(len(features)):
-            windows[index] = self._latest_window(features[: index + 1])
+        zero_padding = features.new_zeros((self.config.window_size - 1, features.shape[1]))
+        padded_features = torch.cat((zero_padding, features), dim=0)
+        windows = padded_features.unfold(0, self.config.window_size, 1).transpose(1, 2).contiguous()
         return windows, targets
 
     @staticmethod
@@ -265,8 +265,9 @@ class TransformerPriceModel(ISignalModel):
         if isinstance(value, Signal):
             return SIGNAL_TO_INDEX[value]
         if isinstance(value, str):
+            normalized_value = value.upper()
             try:
-                return SIGNAL_TO_INDEX[Signal(value.upper())]
+                return SIGNAL_TO_INDEX[Signal(normalized_value)]
             except ValueError as exc:
                 valid_values = ", ".join(signal.value for signal in SIGNALS)
                 msg = f"invalid target signal string: {value!r}. Valid values are: {valid_values}"

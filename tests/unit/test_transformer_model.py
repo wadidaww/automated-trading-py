@@ -50,7 +50,8 @@ def test_transformer_fit_and_round_trip(tmp_path: Path) -> None:
         epochs=1,
         batch_size=2,
     )
-    labels = pd.Series([Signal.SELL, "HOLD", Signal.BUY, "BUY", 0, -1, "HOLD", 1])
+    # Intentionally mix enum, string, lower-case string, and integer label formats.
+    labels = pd.Series([Signal.SELL, "HOLD", Signal.BUY, "buy", 0, -1, "HOLD", 1])
     assert model.net is not None
     initial_head = model.net.head.weight.detach().clone()
 
