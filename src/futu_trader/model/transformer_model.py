@@ -239,6 +239,7 @@ class TransformerPriceModel(ISignalModel):
         return torch.tensor(frame.to_numpy(), dtype=torch.float32)
 
     def _latest_window(self, features: torch.Tensor) -> torch.Tensor:
+        """Return a fixed-size window, prepending zero rows when history is short."""
         if len(features) >= self.config.window_size:
             return features[-self.config.window_size :]
 
@@ -264,7 +265,11 @@ class TransformerPriceModel(ISignalModel):
         if isinstance(value, Signal):
             return SIGNAL_TO_INDEX[value]
         if isinstance(value, str):
-            return SIGNAL_TO_INDEX[Signal(value.upper())]
+            try:
+                return SIGNAL_TO_INDEX[Signal(value.upper())]
+            except ValueError as exc:
+                msg = f"invalid target signal string: {value!r}"
+                raise ValueError(msg) from exc
         if isinstance(value, int) and value in INTEGER_TO_SIGNAL:
             return SIGNAL_TO_INDEX[INTEGER_TO_SIGNAL[value]]
 

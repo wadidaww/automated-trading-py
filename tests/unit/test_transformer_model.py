@@ -68,3 +68,9 @@ def test_transformer_fit_and_round_trip(tmp_path: Path) -> None:
     assert prediction.signal in Signal
     assert prediction.metadata["window_size"] == 3
     assert loaded.feature_columns == ["close", "volume", "return_1d"]
+
+
+@pytest.mark.parametrize("label", [2, "INVALID", None])
+def test_transformer_rejects_invalid_labels(label: object) -> None:
+    with pytest.raises(ValueError, match="target signal|string|target values"):
+        TransformerPriceModel._target_to_index(label)
