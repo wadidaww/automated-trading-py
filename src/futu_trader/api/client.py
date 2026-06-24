@@ -8,16 +8,18 @@ import random
 import time
 from dataclasses import dataclass
 from typing import Any
+from typesafe.payload import Payload
 
-import pandas as pd
 from futu import (
-    RET_OK,
     OpenQuoteContext,
     OpenSecTradeContext,
     OrderType,
+    TrdEnv,
+    TrdMarket,
     TrdSide,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, validate_call, Field
+from utils.dataframe import Extractor
 
 
 class QuoteResponse(BaseModel):
@@ -77,8 +79,8 @@ class FutuClient:
         heartbeat_interval_s: int = 10,
         rate_limit_requests: int = 300,
         rate_limit_window_s: int = 30,
-        trade_market: str = "HK",
-        trd_env: str = "SIMULATE",
+        trade_market: str = TrdMarket.HK,
+        trd_env: str = TrdEnv.SIMULATE,
         acc_id: int | None = None,
         allow_paper_fallback: bool = True,
         connection_timeout_s: float = 0.2,
@@ -128,9 +130,7 @@ class FutuClient:
                 self._trade_ctx = OpenSecTradeContext(
                     filter_trdmarket=self.trade_market, host=self.host, port=self.port
                 )
-                ret, message = await asyncio.to_thread(self._quote_ctx.get_global_state)
-                if ret != RET_OK:
-                    raise RuntimeError(str(message))
+                _ = Payload.str_payload(await asyncio.to_thread(self._quote_ctx.get_global_state))
                 self._connected = True
                 return
             except RuntimeError:
@@ -171,16 +171,6 @@ class FutuClient:
         if not self._connected and not self._paper_fallback:
             await self.connect()
 
-    @staticmethod
-    def _extract_row_value(payload: pd.DataFrame, columns: tuple[str, ...], fallback: str) -> str:
-        """Get first non-null value from candidate columns."""
-        for column in columns:
-            if column in payload.columns:
-                value = payload[column].iloc[0]
-                if pd.notna(value):
-                    return str(value)
-        return fallback
-
     async def get_quote(self, symbol: str) -> QuoteResponse:
         """Get quote for symbol.
 
@@ -194,21 +184,27 @@ class FutuClient:
         await self._ensure_connected()
         if self._paper_fallback or self._quote_ctx is None:
             return QuoteResponse(symbol=symbol, price=100.0)
-        ret, payload = await asyncio.to_thread(self._quote_ctx.get_market_snapshot, [symbol])
-        if ret != RET_OK:
-            raise RuntimeError(str(payload))
-        if payload.empty:
+        payload_df = Payload.df_payload(
+            await asyncio.to_thread(self._quote_ctx.get_market_snapshot, [symbol])
+        )
+        if payload_df.empty:
             raise RuntimeError(f"no market snapshot for {symbol}")
-        response_symbol = self._extract_row_value(payload, ("code", "stock_code"), symbol)
-        if "last_price" in payload.columns:
-            price = float(payload["last_price"].iloc[0])
-        elif "nominal_price" in payload.columns:
-            price = float(payload["nominal_price"].iloc[0])
+        response_symbol = Extractor.extract_symbol_from_payload(payload_df, fallback=symbol)
+        if "last_price" in payload_df.columns:
+            price = float(payload_df["last_price"].iloc[0])
+        elif "nominal_price" in payload_df.columns:
+            price = float(payload_df["nominal_price"].iloc[0])
         else:
             raise RuntimeError("market snapshot missing price columns")
         return QuoteResponse(symbol=response_symbol, price=price)
 
-    async def place_order(self, symbol: str, qty: int, side: str) -> OrderResponse:
+    @validate_call
+    async def place_order(
+        self,
+        symbol: str = Field(..., description="Security code"),
+        qty: int = Field(..., gt=0, description="Quantity in shares"),
+        side: str = Field(..., pattern="^(BUY|SELL)$", description="BUY or SELL"),
+    ) -> OrderResponse:
         """Place an order.
 
         Args:
@@ -219,8 +215,6 @@ class FutuClient:
         Returns:
             OrderResponse: Typed response.
         """
-        if qty <= 0:
-            raise ValueError("qty must be positive")
         side_upper = side.upper()
         side_map = {"BUY": TrdSide.BUY, "SELL": TrdSide.SELL}
         if side_upper not in side_map:
@@ -229,20 +223,20 @@ class FutuClient:
         await self._ensure_connected()
         if self._paper_fallback or self._trade_ctx is None:
             return OrderResponse(order_id=f"{symbol}-{side}-{qty}", status="SUBMITTED")
-        ret, payload = await asyncio.to_thread(
-            self._trade_ctx.place_order,
-            MARKET_ORDER_PRICE,
-            qty,
-            symbol,
-            side_map[side_upper],
-            order_type=OrderType.MARKET,
-            trd_env=self.trd_env,
-            acc_id=DEFAULT_ACCOUNT_ID if self.acc_id is None else self.acc_id,
+        payload_df = Payload.df_payload(
+            await asyncio.to_thread(
+                self._trade_ctx.place_order,
+                MARKET_ORDER_PRICE,
+                qty,
+                symbol,
+                side_map[side_upper],
+                order_type=OrderType.MARKET,
+                trd_env=self.trd_env,
+                acc_id=DEFAULT_ACCOUNT_ID if self.acc_id is None else self.acc_id,
+            )
         )
-        if ret != RET_OK:
-            raise RuntimeError(str(payload))
-        if payload.empty:
+        if payload_df.empty:
             raise RuntimeError("empty order response")
-        order_id = self._extract_row_value(payload, ("order_id",), f"{symbol}-{side}-{qty}")
-        status = self._extract_row_value(payload, ("order_status",), "SUBMITTED")
+        order_id = Extractor._extract_row_value(payload_df, ("order_id",), f"{symbol}-{side}-{qty}")
+        status = Extractor._extract_row_value(payload_df, ("order_status",), "SUBMITTED")
         return OrderResponse(order_id=order_id, status=status)
