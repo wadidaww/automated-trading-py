@@ -16,6 +16,8 @@ from futu_trader.model.base import ISignalModel, Prediction, Signal
 SIGNALS: tuple[Signal, Signal, Signal] = (Signal.SELL, Signal.HOLD, Signal.BUY)
 SIGNAL_TO_INDEX: dict[Signal, int] = {signal: index for index, signal in enumerate(SIGNALS)}
 INTEGER_TO_SIGNAL: dict[int, Signal] = {-1: Signal.SELL, 0: Signal.HOLD, 1: Signal.BUY}
+POSITION_EMBEDDING_INIT_STD = 0.02
+FEEDFORWARD_EXPANSION_FACTOR = 4
 
 
 @dataclass(slots=True)
@@ -39,7 +41,9 @@ class PositionalEncoding(nn.Module):
 
     def __init__(self, window_size: int, hidden_size: int) -> None:
         super().__init__()
-        self.embedding = nn.Parameter(torch.randn(1, window_size, hidden_size) * 0.02)
+        self.embedding = nn.Parameter(
+            torch.randn(1, window_size, hidden_size) * POSITION_EMBEDDING_INIT_STD
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Add position embeddings to projected feature windows."""
@@ -63,7 +67,7 @@ class TransformerPriceNet(nn.Module):
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=config.hidden_size,
             nhead=config.num_heads,
-            dim_feedforward=config.hidden_size * 4,
+            dim_feedforward=config.hidden_size * FEEDFORWARD_EXPANSION_FACTOR,
             dropout=config.dropout,
             activation="gelu",
             batch_first=True,
@@ -192,7 +196,14 @@ class TransformerPriceModel(ISignalModel):
         """Load a serialized transformer model artifact."""
         payload: dict[str, Any] = torch.load(path, map_location="cpu", weights_only=True)
         config = payload["config"]
-        instance = cls(**config, feature_columns=payload.get("feature_columns"))
+        feature_columns_payload = payload.get("feature_columns")
+        feature_columns = (
+            feature_columns_payload
+            if isinstance(feature_columns_payload, list)
+            and all(isinstance(column, str) for column in feature_columns_payload)
+            else None
+        )
+        instance = cls(**config, feature_columns=feature_columns)
         if instance.net is None:
             instance._build_net()
         if instance.net is None:
