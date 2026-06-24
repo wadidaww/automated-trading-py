@@ -14,6 +14,8 @@ from futu_trader.model.base import ISignalModel, Prediction, Signal
 
 
 SIGNALS: tuple[Signal, Signal, Signal] = (Signal.SELL, Signal.HOLD, Signal.BUY)
+SIGNAL_TO_INDEX: dict[Signal, int] = {signal: index for index, signal in enumerate(SIGNALS)}
+INTEGER_TO_SIGNAL: dict[int, Signal] = {-1: Signal.SELL, 0: Signal.HOLD, 1: Signal.BUY}
 
 
 @dataclass(slots=True)
@@ -76,7 +78,7 @@ class TransformerPriceNet(nn.Module):
         encoded = self.projection(x)
         encoded = self.position(encoded)
         encoded = self.encoder(encoded)
-        pooled = self.norm(encoded[:, -1, :])
+        pooled = self.norm(encoded.mean(dim=1))
         return cast(torch.Tensor, self.head(pooled))
 
 
@@ -229,7 +231,7 @@ class TransformerPriceModel(ISignalModel):
         if len(features) >= self.config.window_size:
             return features[-self.config.window_size :]
 
-        padding = features[:1].repeat(self.config.window_size - len(features), 1)
+        padding = features.new_zeros((self.config.window_size - len(features), features.shape[1]))
         return torch.cat((padding, features), dim=0)
 
     def _build_training_windows(
@@ -249,13 +251,11 @@ class TransformerPriceModel(ISignalModel):
     @staticmethod
     def _target_to_index(value: object) -> int:
         if isinstance(value, Signal):
-            return SIGNALS.index(value)
+            return SIGNAL_TO_INDEX[value]
         if isinstance(value, str):
-            return SIGNALS.index(Signal(value.upper()))
-        if isinstance(value, int):
-            mapping = {-1: 0, 0: 1, 1: 2}
-            if value in mapping:
-                return mapping[value]
+            return SIGNAL_TO_INDEX[Signal(value.upper())]
+        if isinstance(value, int) and value in INTEGER_TO_SIGNAL:
+            return SIGNAL_TO_INDEX[INTEGER_TO_SIGNAL[value]]
 
         msg = "target values must be Signal, signal strings, or -1/0/1 integers"
         raise ValueError(msg)
