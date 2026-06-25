@@ -1,0 +1,15 @@
+name: Deploy Prod
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t ghcr.io/${{ github.repository }}:latest .
+      - run: echo "Deploy step placeholder with approval gate"

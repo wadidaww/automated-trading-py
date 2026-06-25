@@ -1,0 +1,28 @@
+name: Model Train
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        required: true
+      date_from:
+        required: false
+      date_to:
+        required: false
+      model_type:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install poetry
+      - run: poetry install --with dev
+      - run: python scripts/fetch_historical_data.py --symbol ${{ inputs.symbol }}
+      - run: python -m futu_trader.model.trainer --model ${{ inputs.model_type }} --symbols ${{ inputs.symbol }}

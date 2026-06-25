@@ -1,0 +1,34 @@
+opend:
+  host: "127.0.0.1"
+  port: 11111
+  heartbeat_interval_s: 10
+  reconnect_max_attempts: 5
+  rate_limit_requests: 300
+  rate_limit_window_s: 30
+trading:
+  account_id: "${FUTU_ACCOUNT_ID}"
+  market: "HK"
+  symbols: ["700.HK"]
+  order_type: "LIMIT"
+  max_position_notional_hkd: 50000
+  max_portfolio_notional_hkd: 500000
+  max_daily_loss_hkd: 10000
+  max_open_orders: 10
+  concentration_limit_pct: 0.2
+  signal_cooldown_s: 60
+model:
+  type: "mean_reversion"
+  path: "data/models/model.pkl"
+  hot_reload: false
+  confidence_threshold: 0.65
+pipeline:
+  data_window_size: 100
+  feature_interval: "5m"
+  queue_maxsize: 1000
+logging:
+  level: "info"
+  format: "json"
+  file: "logs/trader.log"
+  rotate_bytes: 104857600
+metrics:
+  prometheus_port: 9090
