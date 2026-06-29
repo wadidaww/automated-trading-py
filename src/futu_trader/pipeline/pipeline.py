@@ -7,16 +7,8 @@ from contextlib import suppress
 
 from prometheus_client import Counter, Gauge
 
-from futu_trader.api.client import FutuClient
 from futu_trader.api.quote_handler import QuoteEvent
-from futu_trader.execution.order_manager import OrderManager
-from futu_trader.model.mean_reversion import MeanReversionModel
-from futu_trader.pipeline.audit_stage import AuditStage
-from futu_trader.pipeline.data_stage import DataStage
-from futu_trader.pipeline.execution_stage import ExecutionStage
-from futu_trader.pipeline.risk_stage import RiskStage
-from futu_trader.pipeline.signal_stage import SignalStage
-from futu_trader.risk.risk_engine import RiskEngine
+from futu_trader.pipeline.factory import DefaultPipelineFactory, IPipelineFactory
 
 QUEUE_DEPTH = Gauge(name="pipeline_queue_depth", documentation="Queue depth", labelnames=["queue"])
 THROUGHPUT = Counter(
@@ -27,23 +19,16 @@ THROUGHPUT = Counter(
 class TradingPipeline:
     """Event-driven async pipeline with start/stop/drain lifecycle."""
 
-    def __init__(self, queue_maxsize: int = 1000) -> None:
+    def __init__(self, factory: IPipelineFactory | None = None, queue_maxsize: int = 1000) -> None:
         self.input_queue: asyncio.Queue[QuoteEvent] = asyncio.Queue(maxsize=queue_maxsize)
         self._tasks: list[asyncio.Task[None]] = []
 
-        self.data_stage = DataStage()
-        self.signal_stage = SignalStage(MeanReversionModel(), confidence_threshold=0.0)
-        self.risk_stage = RiskStage(
-            RiskEngine(
-                max_symbol_notional_minor=10_000_000,
-                max_portfolio_notional_minor=50_000_000,
-                max_daily_loss_minor=1_000_000,
-                max_open_orders=50,
-                concentration_limit_pct=0.5,
-            )
-        )
-        self.execution_stage = ExecutionStage(OrderManager(FutuClient()))
-        self.audit_stage = AuditStage()
+        _factory = factory or DefaultPipelineFactory()
+        self.data_stage = _factory.create_data_stage()
+        self.signal_stage = _factory.create_signal_stage()
+        self.risk_stage = _factory.create_risk_stage()
+        self.execution_stage = _factory.create_execution_stage()
+        self.audit_stage = _factory.create_audit_stage()
 
     async def start(self) -> None:
         """Start background worker."""
