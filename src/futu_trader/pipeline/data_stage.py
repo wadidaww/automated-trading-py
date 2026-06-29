@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from futu_trader.api.quote_handler import QuoteEvent
+from futu_trader.pipeline.base import IStage
 
 
 @dataclass(slots=True)
@@ -16,7 +17,7 @@ class FeatureWindow:
     z_score: float
 
 
-class DataStage:
+class DataStage(IStage[QuoteEvent, FeatureWindow]):
     """Convert raw quotes to lightweight feature windows."""
 
     async def process(self, item: QuoteEvent) -> FeatureWindow:

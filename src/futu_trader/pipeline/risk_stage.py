@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from futu_trader.pipeline.base import IStage
 from futu_trader.pipeline.signal_stage import TradeSignal
 from futu_trader.risk.risk_engine import RiskEngine, RiskInput
 
@@ -17,7 +18,7 @@ class ApprovedOrder:
     side: str
 
 
-class RiskStage:
+class RiskStage(IStage[TradeSignal, ApprovedOrder | None]):
     """Risk gate stage."""
 
     def __init__(self, engine: RiskEngine) -> None:

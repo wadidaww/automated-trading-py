@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
+from futu_trader.pipeline.base import IStage
 from futu_trader.pipeline.execution_stage import OrderReceipt
 from futu_trader.utils.logger import get_logger
 
 
-class AuditStage:
+class AuditStage(IStage[OrderReceipt, None]):
     """Persist/audit receipts."""
 
     def __init__(self) -> None:
