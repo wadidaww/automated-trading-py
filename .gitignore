@@ -11,3 +11,4 @@ data/processed/*
 logs/
 futu-opend
 src/samples
+.vscode

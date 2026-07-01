@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from futu_trader.model.base import ISignalModel, Signal
+from futu_trader.pipeline.base import IStage
 from futu_trader.pipeline.data_stage import FeatureWindow
 
 
@@ -20,7 +21,7 @@ class TradeSignal:
     price: float
 
 
-class SignalStage:
+class SignalStage(IStage[FeatureWindow, TradeSignal | None]):
     """Generate trade signals with confidence threshold."""
 
     def __init__(self, model: ISignalModel, confidence_threshold: float = 0.65) -> None:

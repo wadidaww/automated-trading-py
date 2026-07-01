@@ -9,6 +9,8 @@ import pandas as pd
 from futu_trader.model.base import ISignalModel, Prediction, Signal
 
 
+# Idea of MeanReversionModel,
+# asset prices tend to revert to their historical mean over time.
 class MeanReversionModel(ISignalModel):
     """Z-score threshold model."""
 
