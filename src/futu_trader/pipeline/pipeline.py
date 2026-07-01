@@ -18,8 +18,10 @@ from futu_trader.pipeline.risk_stage import RiskStage
 from futu_trader.pipeline.signal_stage import SignalStage
 from futu_trader.risk.risk_engine import RiskEngine
 
-QUEUE_DEPTH = Gauge("pipeline_queue_depth", "Queue depth", ["queue"])
-THROUGHPUT = Counter("pipeline_items_processed_total", "Processed items", ["stage"])
+QUEUE_DEPTH = Gauge(name="pipeline_queue_depth", documentation="Queue depth", labelnames=["queue"])
+THROUGHPUT = Counter(
+    name="pipeline_items_processed_total", documentation="Processed items", labelnames=["stage"]
+)
 
 
 class TradingPipeline:
