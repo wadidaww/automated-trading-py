@@ -4,7 +4,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from futu_trader.model.lstm_model import LSTMModel  # noqa: E402
+from trader.model.lstm_model import LSTMModel  # noqa: E402
 
 
 def test_lstm_forward_shape() -> None:

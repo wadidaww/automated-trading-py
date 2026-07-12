@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from futu_trader.api.quote_handler import QuoteEvent
-from futu_trader.pipeline.base import IStage
+from trader.api.quote_handler import QuoteEvent
+from trader.pipeline.base import IStage
 
 
 @dataclass(slots=True)

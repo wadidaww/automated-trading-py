@@ -6,7 +6,8 @@ import uuid
 from dataclasses import dataclass
 from enum import Enum
 
-from futu_trader.api.client import FutuClient
+from trader.api.client import FutuClient
+from trader.misc.types.futu import TradeSide
 
 
 class OrderState(Enum):
@@ -26,7 +27,7 @@ class ManagedOrder:
 
     symbol: str
     qty: int
-    side: str
+    side: TradeSide
     dedupe_key: str
     state: OrderState = OrderState.PENDING
 
@@ -39,7 +40,7 @@ class OrderManager:
         self._seen_keys: set[str] = set()
 
     async def place_order(
-        self, symbol: str, qty: int, side: str, dedupe_key: str | None = None
+        self, symbol: str, qty: int, side: TradeSide, dedupe_key: str | None = None
     ) -> ManagedOrder:
         """Place order if dedupe key is unseen."""
         key = dedupe_key or str(uuid.uuid4())

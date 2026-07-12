@@ -7,8 +7,8 @@ from contextlib import suppress
 
 from prometheus_client import Counter, Gauge
 
-from futu_trader.api.quote_handler import QuoteEvent
-from futu_trader.pipeline.factory import DefaultPipelineFactory, IPipelineFactory
+from trader.api.quote_handler import QuoteEvent
+from trader.pipeline.factory import DefaultPipelineFactory, IPipelineFactory
 
 QUEUE_DEPTH = Gauge(name="pipeline_queue_depth", documentation="Queue depth", labelnames=["queue"])
 THROUGHPUT = Counter(

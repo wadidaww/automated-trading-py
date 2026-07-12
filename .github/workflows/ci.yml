@@ -22,7 +22,7 @@ jobs:
       - run: poetry run ruff check src/ tests/
       - run: poetry run ruff format --check .
       - run: poetry run mypy src/
-      - run: poetry run pytest tests/unit tests/integration --cov=src/futu_trader --cov-report=xml --cov-fail-under=64
+      - run: poetry run pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail-under=64
       - uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml

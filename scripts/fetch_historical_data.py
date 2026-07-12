@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from futu_trader.data.fetcher import HistoricalDataFetcher
+from trader.data.fetcher import HistoricalDataFetcher
 
 
 def main() -> None:

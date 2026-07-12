@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from futu_trader.model.mean_reversion import MeanReversionModel
+from trader.model.mean_reversion import MeanReversionModel
 
 
 def test_mean_reversion_round_trip(tmp_path) -> None:

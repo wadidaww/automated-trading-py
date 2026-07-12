@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from futu_trader.model.base import ISignalModel
-from futu_trader.model.mean_reversion import MeanReversionModel
+from trader.model.base import ISignalModel
+from trader.model.mean_reversion import MeanReversionModel
 
 
 @dataclass(slots=True)

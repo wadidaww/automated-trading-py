@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from futu_trader.execution.order_manager import OrderManager
-from futu_trader.pipeline.base import IStage
-from futu_trader.pipeline.risk_stage import ApprovedOrder
+from trader.execution.order_manager import OrderManager
+from trader.pipeline.base import IStage
+from trader.pipeline.risk_stage import ApprovedOrder
 
 
 @dataclass(slots=True)

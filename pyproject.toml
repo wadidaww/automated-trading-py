@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Production algorithmic trading system for Futu/Futubull"
 authors = ["wadidaww <wadidaww@users.noreply.github.com>"]
 readme = "README.md"
-packages = [{ include = "futu_trader", from = "src" }]
+packages = [{ include = "trader", from = "src" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"

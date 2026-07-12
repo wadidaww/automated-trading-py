@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from futu_trader.pipeline.base import IStage
-from futu_trader.pipeline.signal_stage import TradeSignal
-from futu_trader.risk.risk_engine import RiskEngine, RiskInput
+from trader.pipeline.base import IStage
+from trader.misc.types.futu import TradeSide
+from trader.pipeline.signal_stage import TradeSignal
+from trader.risk.risk_engine import RiskEngine, RiskInput
+from futu import (
+    TrdSide,
+)
 
 
 @dataclass(slots=True)
@@ -15,7 +19,7 @@ class ApprovedOrder:
 
     symbol: str
     qty: int
-    side: str
+    side: TradeSide
 
 
 class RiskStage(IStage[TradeSignal, ApprovedOrder | None]):
@@ -42,5 +46,5 @@ class RiskStage(IStage[TradeSignal, ApprovedOrder | None]):
         if not decision.approved:
             self.signals_dropped += 1
             return None
-        side = "BUY" if item.signal.value == "BUY" else "SELL"
+        side = TrdSide.BUY if item.signal.value == "BUY" else TrdSide.SELL
         return ApprovedOrder(symbol=item.symbol, qty=1, side=side)

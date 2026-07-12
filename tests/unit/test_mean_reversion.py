@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from futu_trader.model.base import Signal
-from futu_trader.model.mean_reversion import MeanReversionModel
+from trader.model.base import Signal
+from trader.model.mean_reversion import MeanReversionModel
 
 
 def test_mean_reversion_buy_signal() -> None:

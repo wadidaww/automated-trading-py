@@ -47,14 +47,14 @@ python scripts/run_backtest.py --config config/config.staging.yaml
 
 CLI:
 ```bash
-python -m futu_trader.model.trainer --model mean_reversion --symbols 700.HK
+python -m trader.model.trainer --model mean_reversion --symbols 700.HK
 ```
 GitHub Actions: run `Model Train` workflow manually.
 
 ## Paper trading validation
 
 ```bash
-python -m futu_trader --mode paper --duration 3600
+python -m trader --mode paper --duration 3600
 ```
 
 ## Production deployment

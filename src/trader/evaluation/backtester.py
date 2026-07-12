@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from futu_trader.evaluation.metrics import Trade, max_drawdown, sharpe_ratio
+from trader.evaluation.metrics import Trade, max_drawdown, sharpe_ratio
 
 
 class Backtester:

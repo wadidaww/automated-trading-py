@@ -7,8 +7,8 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from futu_trader.model.base import Signal  # noqa: E402
-from futu_trader.model.transformer_model import TransformerPriceModel  # noqa: E402
+from trader.model.base import Signal  # noqa: E402
+from trader.model.transformer_model import TransformerPriceModel  # noqa: E402
 
 
 def _features(rows: int = 8) -> pd.DataFrame:

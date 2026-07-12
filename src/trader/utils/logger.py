@@ -8,7 +8,7 @@ from typing import cast
 import structlog
 
 
-def get_logger(name: str = "futu_trader") -> structlog.stdlib.BoundLogger:
+def get_logger(name: str = "trader") -> structlog.stdlib.BoundLogger:
     """Create structlog logger.
 
     Args:

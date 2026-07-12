@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from futu_trader.data.normalizer import DataNormalizer
+from trader.data.normalizer import DataNormalizer
 
 
 def test_add_features_contains_expected_columns(ohlcv_df) -> None:

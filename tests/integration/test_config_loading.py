@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from futu_trader.utils.config import load_config
+from trader.utils.config import load_config
 
 
 def test_config_loading() -> None:

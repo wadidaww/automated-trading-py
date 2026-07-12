@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from futu_trader.model.base import ISignalModel, Signal
-from futu_trader.pipeline.base import IStage
-from futu_trader.pipeline.data_stage import FeatureWindow
+from trader.model.base import ISignalModel, Signal
+from trader.pipeline.base import IStage
+from trader.pipeline.data_stage import FeatureWindow
 
 
 @dataclass(slots=True)

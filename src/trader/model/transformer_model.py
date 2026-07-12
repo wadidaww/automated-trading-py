@@ -10,7 +10,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from futu_trader.model.base import ISignalModel, Prediction, Signal
+from trader.model.base import ISignalModel, Prediction, Signal
 
 
 SIGNALS: tuple[Signal, Signal, Signal] = (Signal.SELL, Signal.HOLD, Signal.BUY)

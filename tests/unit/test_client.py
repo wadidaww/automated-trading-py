@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import pytest
-from futu import RET_OK
+from futu import (
+    RET_OK,
+    TrdSide,
+)
 from pandas import DataFrame
 
-from futu_trader.api import client as client_module
-from futu_trader.api.client import FutuClient
+from trader.api import client as client_module
+from trader.api.client import FutuClient
 
 
 @pytest.mark.asyncio
@@ -38,7 +41,7 @@ async def test_client_get_quote_and_place_order(monkeypatch: pytest.MonkeyPatch)
 
     async with FutuClient(allow_paper_fallback=False, max_retries=1) as client:
         quote = await client.get_quote("700.HK")
-        order = await client.place_order("700.HK", 1, "BUY")
+        order = await client.place_order("700.HK", 1, TrdSide.BUY)
     assert quote.symbol == "700.HK"
     assert quote.price == 100.5
     assert order.status == "SUBMITTED"

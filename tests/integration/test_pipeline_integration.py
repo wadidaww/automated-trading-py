@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from futu_trader.api.quote_handler import QuoteEvent
-from futu_trader.pipeline.pipeline import TradingPipeline
+from trader.api.quote_handler import QuoteEvent
+from trader.pipeline.pipeline import TradingPipeline
 
 
 @pytest.mark.asyncio

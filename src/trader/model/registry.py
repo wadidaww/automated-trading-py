@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from threading import RLock
 
-from futu_trader.model.base import ISignalModel
-from futu_trader.model.mean_reversion import MeanReversionModel
+from trader.model.base import ISignalModel
+from trader.model.mean_reversion import MeanReversionModel
 
 
 class ModelRegistry:

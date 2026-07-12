@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from futu_trader.model.gradient_boosting import GradientBoostingModel
+from trader.model.gradient_boosting import GradientBoostingModel
 
 
 def test_gradient_boosting_fit_predict() -> None:

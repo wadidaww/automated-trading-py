@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from futu_trader.evaluation.backtester import Backtester
+from trader.evaluation.backtester import Backtester
 
 
 def main() -> None:

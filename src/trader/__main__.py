@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from futu_trader.pipeline.pipeline import TradingPipeline
+from trader.pipeline.pipeline import TradingPipeline
 
 
 def parse_args() -> argparse.Namespace:

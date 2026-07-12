@@ -6,7 +6,7 @@ import json
 
 import pandas as pd
 
-from futu_trader.model.base import ISignalModel, Prediction, Signal
+from trader.model.base import ISignalModel, Prediction, Signal
 
 
 # Idea of MeanReversionModel,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from futu_trader.risk.kelly_criterion import KellyCriterion
-from futu_trader.risk.risk_engine import RiskEngine, RiskInput
+from trader.risk.kelly_criterion import KellyCriterion
+from trader.risk.risk_engine import RiskEngine, RiskInput
 
 
 def test_risk_engine_rejects_symbol_limit() -> None:

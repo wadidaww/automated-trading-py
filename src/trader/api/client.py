@@ -14,12 +14,12 @@ from futu import (
     OrderType,
     TrdEnv,
     TrdMarket,
-    TrdSide,
 )
 from pydantic import BaseModel, validate_call, Field
 
-from futu_trader.api.typesafe.payload import Payload
-from futu_trader.utils.dataframe import Extractor
+from trader.api.typesafe.payload import Payload
+from trader.misc.types.futu import TradeSide
+from trader.utils.dataframe import Extractor
 
 
 class QuoteResponse(BaseModel):
@@ -38,6 +38,9 @@ class OrderResponse(BaseModel):
 
 MARKET_ORDER_PRICE = 0.0
 DEFAULT_ACCOUNT_ID = 0
+SYMBOL_FIELD = Field(..., description="Security code")
+QTY_FIELD = Field(..., gt=0, description="Quantity in shares")
+SIDE_FIELD = Field(..., pattern="^(BUY|SELL)$", description="BUY or SELL")
 
 
 @dataclass
@@ -201,9 +204,9 @@ class FutuClient:
     @validate_call
     async def place_order(
         self,
-        symbol: str = Field(..., description="Security code"),
-        qty: int = Field(..., gt=0, description="Quantity in shares"),
-        side: str = Field(..., pattern="^(BUY|SELL)$", description="BUY or SELL"),
+        symbol: str = SYMBOL_FIELD,
+        qty: int = QTY_FIELD,
+        side: TradeSide = SIDE_FIELD,
     ) -> OrderResponse:
         """Place an order.
 
@@ -215,10 +218,6 @@ class FutuClient:
         Returns:
             OrderResponse: Typed response.
         """
-        side_upper = side.upper()
-        side_map = {"BUY": TrdSide.BUY, "SELL": TrdSide.SELL}
-        if side_upper not in side_map:
-            raise ValueError("side must be BUY or SELL")
         await self._bucket.acquire()
         await self._ensure_connected()
         if self._paper_fallback or self._trade_ctx is None:
@@ -229,7 +228,7 @@ class FutuClient:
                 MARKET_ORDER_PRICE,
                 qty,
                 symbol,
-                side_map[side_upper],
+                side,
                 order_type=OrderType.MARKET,
                 trd_env=self.trd_env,
                 acc_id=DEFAULT_ACCOUNT_ID if self.acc_id is None else self.acc_id,

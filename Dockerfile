@@ -13,5 +13,5 @@ COPY data/models/ ./data/models/
 ENV PYTHONPATH=/app/src
 RUN useradd -m trader && chown -R trader /app
 USER trader
-HEALTHCHECK CMD python -m futu_trader --health-check
-ENTRYPOINT ["python", "-m", "futu_trader"]
+HEALTHCHECK CMD python -m trader --health-check
+ENTRYPOINT ["python", "-m", "trader"]

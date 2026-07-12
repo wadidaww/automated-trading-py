@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from futu_trader.api.client import FutuClient
-from futu_trader.execution.order_manager import OrderManager
-from futu_trader.model.mean_reversion import MeanReversionModel
-from futu_trader.pipeline.audit_stage import AuditStage
-from futu_trader.pipeline.data_stage import DataStage
-from futu_trader.pipeline.execution_stage import ExecutionStage
-from futu_trader.pipeline.risk_stage import RiskStage
-from futu_trader.pipeline.signal_stage import SignalStage
-from futu_trader.risk.risk_engine import RiskEngine
+from trader.api.client import FutuClient
+from trader.execution.order_manager import OrderManager
+from trader.model.mean_reversion import MeanReversionModel
+from trader.pipeline.audit_stage import AuditStage
+from trader.pipeline.data_stage import DataStage
+from trader.pipeline.execution_stage import ExecutionStage
+from trader.pipeline.risk_stage import RiskStage
+from trader.pipeline.signal_stage import SignalStage
+from trader.risk.risk_engine import RiskEngine
 
 
 class IPipelineFactory(ABC):

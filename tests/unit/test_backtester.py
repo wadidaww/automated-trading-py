@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from futu_trader.evaluation.backtester import Backtester
+from trader.evaluation.backtester import Backtester
 
 
 def test_backtester_returns_metrics() -> None:

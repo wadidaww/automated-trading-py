@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from futu_trader.pipeline.base import IStage
-from futu_trader.pipeline.execution_stage import OrderReceipt
-from futu_trader.utils.logger import get_logger
+from trader.pipeline.base import IStage
+from trader.pipeline.execution_stage import OrderReceipt
+from trader.utils.logger import get_logger
 
 
 class AuditStage(IStage[OrderReceipt, None]):

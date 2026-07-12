@@ -6,7 +6,7 @@ import joblib
 import pandas as pd
 from sklearn.ensemble import GradientBoostingClassifier
 
-from futu_trader.model.base import ISignalModel, Prediction, Signal
+from trader.model.base import ISignalModel, Prediction, Signal
 
 
 class GradientBoostingModel(ISignalModel):
