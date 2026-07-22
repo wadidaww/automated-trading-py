@@ -37,7 +37,7 @@ class OrderResponse(BaseModel):
     order_id: str
     status: str
     symbol: str | None = None
-    side: TradeSide | None = None
+    trade_side: TradeSide | None = None
     qty: int | None = None
     price: float | None = None
 
@@ -91,7 +91,7 @@ class OrderStatusResponse(BaseModel):
     order_id: str
     status: str
     symbol: str
-    side: TradeSide | None = None
+    trade_side: TradeSide | None = None
     qty: int = 0
     dealt_qty: int = 0
     price: float | None = None
@@ -315,7 +315,7 @@ class FutuClient:
                 order_id=f"{symbol}-{side}-{qty}",
                 status="SUBMITTED",
                 symbol=symbol,
-                side=side,
+                trade_side=side,
                 qty=qty,
                 price=resolved_price,
             )
@@ -339,7 +339,7 @@ class FutuClient:
             order_id=order_id,
             status=status,
             symbol=symbol,
-            side=side,
+            trade_side=side,
             qty=qty,
             price=resolved_price,
         )
@@ -356,7 +356,7 @@ class FutuClient:
                     order_id=f"{symbol}-BUY-1",
                     status="FILLED",
                     symbol=symbol,
-                    side="BUY",
+                    trade_side="BUY",
                     qty=1,
                     dealt_qty=1,
                     price=100.0,
@@ -499,8 +499,8 @@ class FutuClient:
         symbol = cls._extract_required_str(row, ("code", "stock_code"), fallback="UNKNOWN")
         return PositionResponse(
             symbol=symbol,
-            quantity=cls._extract_first_int(row, ("qty", "can_sell_qty"), fallback=0) or 0,
-            can_sell_qty=cls._extract_first_int(row, ("can_sell_qty", "qty"), fallback=0) or 0,
+            quantity=cls._extract_first_int(row, ("qty",), fallback=0) or 0,
+            can_sell_qty=cls._extract_first_int(row, ("can_sell_qty",), fallback=0) or 0,
             avg_cost=cls._extract_first_float(row, ("cost_price", "cost_price_valid"), fallback=0.0)
             or 0.0,
             market_value=cls._extract_first_float(row, ("market_val",), fallback=0.0) or 0.0,
@@ -530,7 +530,7 @@ class FutuClient:
             order_id=order_id,
             status=status,
             symbol=symbol,
-            side=side,
+            trade_side=side,
             qty=cls._extract_first_int(row, ("qty",), fallback=0) or 0,
             dealt_qty=cls._extract_first_int(row, ("dealt_qty",), fallback=0) or 0,
             price=cls._extract_first_float(row, ("price",)),

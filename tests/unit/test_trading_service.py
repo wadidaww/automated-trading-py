@@ -63,7 +63,7 @@ async def test_trading_service_places_buy_and_sell_orders(
             order_id=f"{symbol}-{side}-{qty}",
             status="SUBMITTED",
             symbol=symbol,
-            side=side,
+            trade_side=side,
             qty=qty,
             price=price,
         )
@@ -80,9 +80,9 @@ async def test_trading_service_places_buy_and_sell_orders(
     assert evaluation.buy_target_hit is True
     assert evaluation.sell_target_hit is False
     assert evaluation.held_quantity == 5
-    assert buy_order.side == "BUY"
+    assert buy_order.trade_side == "BUY"
     assert buy_order.price == 95.0
-    assert sell_order.side == "SELL"
+    assert sell_order.trade_side == "SELL"
     assert sell_order.price == 105.0
 
 
