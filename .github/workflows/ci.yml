@@ -22,7 +22,7 @@ jobs:
           python-version: '3.11'
       - uses: abatilo/actions-poetry@v3
       - run: poetry install --with dev --no-interaction
-      - run: poetry run ruff check src tests
+      - run: poetry run ruff check src/ tests/
       - run: poetry run ruff format --check .
       - run: poetry run mypy src
       - run: poetry run pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail-under=64
