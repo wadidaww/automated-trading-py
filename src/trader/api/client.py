@@ -476,7 +476,7 @@ class FutuClient:
     @staticmethod
     def _extract_first_str(
         row: pd.Series, columns: tuple[str, ...], fallback: None
-    ) -> None: ...
+    ) -> str | None: ...
 
     @staticmethod
     def _extract_first_str(
@@ -499,8 +499,6 @@ class FutuClient:
     def _position_from_row(cls, row: pd.Series) -> PositionResponse:
         """Build a typed position response from raw DataFrame row."""
         symbol = cls._extract_first_str(row, ("code", "stock_code"), fallback="UNKNOWN")
-        if symbol is None:
-            raise RuntimeError("position payload missing symbol")
         return PositionResponse(
             symbol=symbol,
             quantity=cls._extract_first_int(row, ("qty", "can_sell_qty"), fallback=0) or 0,
@@ -521,7 +519,7 @@ class FutuClient:
         symbol = cls._extract_first_str(row, ("code", "stock_code"), fallback="UNKNOWN")
         order_id = cls._extract_first_str(row, ("order_id",), fallback="")
         status = cls._extract_first_str(row, ("order_status", "status"), fallback="UNKNOWN")
-        if symbol is None or order_id is None or status is None:
+        if order_id is None:
             raise RuntimeError("order payload missing required fields")
         raw_side = cls._extract_first_str(row, ("trd_side", "side"), fallback=None)
         if raw_side == "BUY":
