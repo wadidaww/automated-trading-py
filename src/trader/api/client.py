@@ -437,7 +437,13 @@ class FutuClient:
                 row, ("avl_withdrawal_cash", "available_funds", "max_power_short"), fallback=0.0
             )
             or 0.0,
-            unrealized_pnl=self._extract_first_float(row, ("unrealized_pl", "holding_pl",)),
+            unrealized_pnl=self._extract_first_float(
+                row,
+                (
+                    "unrealized_pl",
+                    "holding_pl",
+                ),
+            ),
             realized_pnl=self._extract_first_float(row, ("realized_pl",)),
         )
 

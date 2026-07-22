@@ -55,9 +55,7 @@ class TradingService:
             held_quantity=held_quantity,
             buy_target_hit=buy_target is not None and stock_info.price <= buy_target,
             sell_target_hit=(
-                sell_target is not None
-                and held_quantity > 0
-                and stock_info.price >= sell_target
+                sell_target is not None and held_quantity > 0 and stock_info.price >= sell_target
             ),
         )
 
