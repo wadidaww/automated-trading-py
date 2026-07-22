@@ -309,7 +309,7 @@ class FutuClient:
         resolved_order_type = self._resolve_order_type(order_type)
         resolved_price = MARKET_ORDER_PRICE if resolved_order_type == OrderType.MARKET else price
         if resolved_order_type != OrderType.MARKET and resolved_price is None:
-            raise ValueError("limit orders require a price")
+            raise ValueError("limit orders require a price parameter to be specified")
         if self._paper_fallback or self._trade_ctx is None:
             return OrderResponse(
                 order_id=f"{symbol}-{side}-{qty}",
@@ -518,7 +518,7 @@ class FutuClient:
         order_id = cls._extract_required_str(row, ("order_id",), fallback="")
         status = cls._extract_required_str(row, ("order_status", "status"), fallback="UNKNOWN")
         if not order_id:
-            raise RuntimeError("order payload missing required fields")
+            raise RuntimeError("order payload missing required field: order_id")
         raw_side = cls._extract_first_str(row, ("trd_side", "side"), fallback=None)
         if raw_side == "BUY":
             side: TradeSide | None = "BUY"

@@ -17,11 +17,13 @@ from trader.execution.trading_service import TradingService
 async def test_trading_service_places_buy_and_sell_orders(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    prices = iter([95.0, 95.0, 110.0])
+
     async def _stock_info(self: FutuClient, symbol: str) -> StockInfoResponse:
         return StockInfoResponse(
             symbol=symbol,
             name="Tencent",
-            price=95.0 if symbol == "700.HK" else 0.0,
+            price=next(prices) if symbol == "700.HK" else 0.0,
             pe_ratio=12.0,
             pb_ratio=1.5,
             lot_size=100,
@@ -71,17 +73,17 @@ async def test_trading_service_places_buy_and_sell_orders(
     monkeypatch.setattr(FutuClient, "place_order", _place_order)
 
     service = TradingService(FutuClient())
-    evaluation = await service.evaluate_targets("700.HK", buy_target=95.0, sell_target=94.0)
+    evaluation = await service.evaluate_targets("700.HK", buy_target=95.0, sell_target=105.0)
     buy_order = await service.place_buy_order("700.HK", qty=2, buy_target=95.0)
-    sell_order = await service.place_sell_order("700.HK", qty=2, sell_target=94.0)
+    sell_order = await service.place_sell_order("700.HK", qty=2, sell_target=105.0)
 
     assert evaluation.buy_target_hit is True
-    assert evaluation.sell_target_hit is True
+    assert evaluation.sell_target_hit is False
     assert evaluation.held_quantity == 5
     assert buy_order.side == "BUY"
     assert buy_order.price == 95.0
     assert sell_order.side == "SELL"
-    assert sell_order.price == 94.0
+    assert sell_order.price == 105.0
 
 
 @pytest.mark.asyncio

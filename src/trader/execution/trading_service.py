@@ -20,8 +20,8 @@ class TargetEvaluation:
 
     symbol: str
     current_price: float
-    buy_target: float
-    sell_target: float
+    buy_target: float | None
+    sell_target: float | None
     held_quantity: int
     buy_target_hit: bool
     sell_target_hit: bool
@@ -42,7 +42,7 @@ class TradingService:
         return await self.client.get_portfolio_condition()
 
     async def evaluate_targets(
-        self, symbol: str, buy_target: float, sell_target: float
+        self, symbol: str, buy_target: float | None = None, sell_target: float | None = None
     ) -> TargetEvaluation:
         """Check whether the market price has reached the configured targets."""
         stock_info, portfolio = await self._load_symbol_state(symbol)
@@ -53,15 +53,19 @@ class TradingService:
             buy_target=buy_target,
             sell_target=sell_target,
             held_quantity=held_quantity,
-            buy_target_hit=stock_info.price <= buy_target,
-            sell_target_hit=held_quantity > 0 and stock_info.price >= sell_target,
+            buy_target_hit=buy_target is not None and stock_info.price <= buy_target,
+            sell_target_hit=(
+                sell_target is not None
+                and held_quantity > 0
+                and stock_info.price >= sell_target
+            ),
         )
 
     async def place_buy_order(
         self, symbol: str, qty: int, buy_target: float, order_type: str = "LIMIT"
     ) -> OrderResponse:
         """Place a buy order only after the buy target is reached."""
-        evaluation = await self.evaluate_targets(symbol, buy_target, sell_target=float("inf"))
+        evaluation = await self.evaluate_targets(symbol, buy_target=buy_target)
         if not evaluation.buy_target_hit:
             raise ValueError("buy target not reached")
         return await self.client.place_order(
@@ -76,7 +80,7 @@ class TradingService:
         self, symbol: str, qty: int, sell_target: float, order_type: str = "LIMIT"
     ) -> OrderResponse:
         """Place a sell order only after the sell target is reached and shares are held."""
-        evaluation = await self.evaluate_targets(symbol, buy_target=0.0, sell_target=sell_target)
+        evaluation = await self.evaluate_targets(symbol, sell_target=sell_target)
         if evaluation.held_quantity < qty:
             raise ValueError("insufficient position to sell")
         if not evaluation.sell_target_hit:
