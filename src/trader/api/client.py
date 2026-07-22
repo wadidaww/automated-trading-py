@@ -7,7 +7,7 @@ import contextlib
 import random
 import time
 from dataclasses import dataclass
-from typing import Any, overload
+from typing import Any
 
 import pandas as pd
 from futu import (
@@ -274,7 +274,7 @@ class FutuClient:
         price = self._extract_first_float(row, ("last_price", "nominal_price"))
         if price is None:
             raise RuntimeError("market snapshot missing price columns")
-        stock_name = self._extract_first_str(row, ("name",), fallback=response_symbol)
+        stock_name = self._extract_required_str(row, ("name",), fallback=response_symbol)
         return StockInfoResponse(
             symbol=response_symbol,
             name=stock_name,
@@ -468,19 +468,9 @@ class FutuClient:
             return fallback
         return int(value)
 
-    @overload
-    @staticmethod
-    def _extract_first_str(row: pd.Series, columns: tuple[str, ...], fallback: str) -> str: ...
-
-    @overload
     @staticmethod
     def _extract_first_str(
-        row: pd.Series, columns: tuple[str, ...], fallback: None
-    ) -> str | None: ...
-
-    @staticmethod
-    def _extract_first_str(
-        row: pd.Series, columns: tuple[str, ...], fallback: str | None
+        row: pd.Series, columns: tuple[str, ...], fallback: str | None = None
     ) -> str | None:
         """Extract first string value from DataFrame row."""
         for column in columns:
@@ -490,6 +480,14 @@ class FutuClient:
                     return str(value)
         return fallback
 
+    @classmethod
+    def _extract_required_str(cls, row: pd.Series, columns: tuple[str, ...], fallback: str) -> str:
+        """Extract first string value or return a required fallback."""
+        value = cls._extract_first_str(row, columns, fallback=fallback)
+        if value is None:
+            return fallback
+        return value
+
     @staticmethod
     def _resolve_order_type(order_type: str) -> int:
         """Resolve public order type string to Futu enum."""
@@ -498,7 +496,7 @@ class FutuClient:
     @classmethod
     def _position_from_row(cls, row: pd.Series) -> PositionResponse:
         """Build a typed position response from raw DataFrame row."""
-        symbol = cls._extract_first_str(row, ("code", "stock_code"), fallback="UNKNOWN")
+        symbol = cls._extract_required_str(row, ("code", "stock_code"), fallback="UNKNOWN")
         return PositionResponse(
             symbol=symbol,
             quantity=cls._extract_first_int(row, ("qty", "can_sell_qty"), fallback=0) or 0,
@@ -516,10 +514,10 @@ class FutuClient:
     @classmethod
     def _order_status_from_row(cls, row: pd.Series) -> OrderStatusResponse:
         """Build a typed order status from raw DataFrame row."""
-        symbol = cls._extract_first_str(row, ("code", "stock_code"), fallback="UNKNOWN")
-        order_id = cls._extract_first_str(row, ("order_id",), fallback="")
-        status = cls._extract_first_str(row, ("order_status", "status"), fallback="UNKNOWN")
-        if order_id is None:
+        symbol = cls._extract_required_str(row, ("code", "stock_code"), fallback="UNKNOWN")
+        order_id = cls._extract_required_str(row, ("order_id",), fallback="")
+        status = cls._extract_required_str(row, ("order_status", "status"), fallback="UNKNOWN")
+        if not order_id:
             raise RuntimeError("order payload missing required fields")
         raw_side = cls._extract_first_str(row, ("trd_side", "side"), fallback=None)
         if raw_side == "BUY":

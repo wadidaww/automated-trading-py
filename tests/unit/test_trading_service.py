@@ -71,15 +71,15 @@ async def test_trading_service_places_buy_and_sell_orders(
     monkeypatch.setattr(FutuClient, "place_order", _place_order)
 
     service = TradingService(FutuClient())
-    evaluation = await service.evaluate_targets("700.HK", buy_target=100.0, sell_target=94.0)
-    buy_order = await service.place_buy_order("700.HK", qty=2, buy_target=100.0)
+    evaluation = await service.evaluate_targets("700.HK", buy_target=95.0, sell_target=94.0)
+    buy_order = await service.place_buy_order("700.HK", qty=2, buy_target=95.0)
     sell_order = await service.place_sell_order("700.HK", qty=2, sell_target=94.0)
 
     assert evaluation.buy_target_hit is True
     assert evaluation.sell_target_hit is True
     assert evaluation.held_quantity == 5
     assert buy_order.side == "BUY"
-    assert buy_order.price == 100.0
+    assert buy_order.price == 95.0
     assert sell_order.side == "SELL"
     assert sell_order.price == 94.0
 
