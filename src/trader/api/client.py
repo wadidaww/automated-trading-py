@@ -7,7 +7,7 @@ import contextlib
 import random
 import time
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 from futu import (
@@ -274,9 +274,9 @@ class FutuClient:
         price = self._extract_first_float(row, ("last_price", "nominal_price"))
         if price is None:
             raise RuntimeError("market snapshot missing price columns")
-        stock_name = (
-            self._extract_first_str(row, ("name",), fallback=response_symbol) or response_symbol
-        )
+        stock_name = self._extract_first_str(row, ("name",), fallback=response_symbol)
+        if stock_name is None:
+            stock_name = response_symbol
         return StockInfoResponse(
             symbol=response_symbol,
             name=stock_name,
@@ -516,7 +516,12 @@ class FutuClient:
         if symbol is None or order_id is None or status is None:
             raise RuntimeError("order payload missing required fields")
         raw_side = cls._extract_first_str(row, ("trd_side", "side"), fallback=None)
-        side = cast("TradeSide | None", raw_side if raw_side in {"BUY", "SELL"} else None)
+        if raw_side == "BUY":
+            side: TradeSide | None = "BUY"
+        elif raw_side == "SELL":
+            side = "SELL"
+        else:
+            side = None
         return OrderStatusResponse(
             order_id=order_id,
             status=status,
