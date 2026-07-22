@@ -37,7 +37,7 @@ class OrderResponse(BaseModel):
     order_id: str
     status: str
     symbol: str | None = None
-    trade_side: TradeSide | None = None
+    order_side: TradeSide | None = None
     qty: int | None = None
     price: float | None = None
 
@@ -91,7 +91,7 @@ class OrderStatusResponse(BaseModel):
     order_id: str
     status: str
     symbol: str
-    trade_side: TradeSide | None = None
+    order_side: TradeSide | None = None
     qty: int = 0
     dealt_qty: int = 0
     price: float | None = None
@@ -309,13 +309,13 @@ class FutuClient:
         resolved_order_type = self._resolve_order_type(order_type)
         resolved_price = MARKET_ORDER_PRICE if resolved_order_type == OrderType.MARKET else price
         if resolved_order_type != OrderType.MARKET and resolved_price is None:
-            raise ValueError("limit orders require a price parameter to be specified")
+            raise ValueError("LIMIT orders require a price parameter to be specified")
         if self._paper_fallback or self._trade_ctx is None:
             return OrderResponse(
                 order_id=f"{symbol}-{side}-{qty}",
                 status="SUBMITTED",
                 symbol=symbol,
-                trade_side=side,
+                order_side=side,
                 qty=qty,
                 price=resolved_price,
             )
@@ -339,7 +339,7 @@ class FutuClient:
             order_id=order_id,
             status=status,
             symbol=symbol,
-            trade_side=side,
+            order_side=side,
             qty=qty,
             price=resolved_price,
         )
@@ -356,7 +356,7 @@ class FutuClient:
                     order_id=f"{symbol}-BUY-1",
                     status="FILLED",
                     symbol=symbol,
-                    trade_side="BUY",
+                    order_side="BUY",
                     qty=1,
                     dealt_qty=1,
                     price=100.0,
@@ -530,7 +530,7 @@ class FutuClient:
             order_id=order_id,
             status=status,
             symbol=symbol,
-            trade_side=side,
+            order_side=side,
             qty=cls._extract_first_int(row, ("qty",), fallback=0) or 0,
             dealt_qty=cls._extract_first_int(row, ("dealt_qty",), fallback=0) or 0,
             price=cls._extract_first_float(row, ("price",)),

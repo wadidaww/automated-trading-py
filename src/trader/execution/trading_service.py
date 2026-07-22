@@ -81,10 +81,13 @@ class TradingService:
     ) -> OrderResponse:
         """Place a sell order only after the sell target is reached and shares are held."""
         evaluation = await self.evaluate_targets(symbol, sell_target=sell_target)
-        if evaluation.held_quantity < qty:
-            raise ValueError("insufficient position to sell")
+        errors: list[str] = []
         if not evaluation.sell_target_hit:
-            raise ValueError("sell target not reached")
+            errors.append("sell target not reached")
+        if evaluation.held_quantity < qty:
+            errors.append("insufficient position to sell")
+        if errors:
+            raise ValueError("; ".join(errors))
         return await self.client.place_order(
             symbol=symbol,
             qty=qty,
