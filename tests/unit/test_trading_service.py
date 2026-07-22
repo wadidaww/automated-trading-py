@@ -89,7 +89,15 @@ async def test_trading_service_rejects_orders_when_targets_not_met(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _stock_info(self: FutuClient, symbol: str) -> StockInfoResponse:
-        return StockInfoResponse(symbol=symbol, name="Tencent", price=110.0)
+        return StockInfoResponse(
+            symbol=symbol,
+            name="Tencent",
+            price=110.0,
+            pe_ratio=12.0,
+            pb_ratio=1.5,
+            lot_size=100,
+            listing_date="2004-06-16",
+        )
 
     async def _portfolio(self: FutuClient) -> PortfolioConditionResponse:
         return PortfolioConditionResponse(

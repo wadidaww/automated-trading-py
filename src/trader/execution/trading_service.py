@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 from trader.api.client import (
@@ -96,7 +97,9 @@ class TradingService:
         self, symbol: str
     ) -> tuple[StockInfoResponse, PortfolioConditionResponse]:
         """Fetch quote and portfolio state together."""
-        return await self.client.get_stock_info(symbol), await self.client.get_portfolio_condition()
+        return await asyncio.gather(
+            self.client.get_stock_info(symbol), self.client.get_portfolio_condition()
+        )
 
     @staticmethod
     def _held_quantity(symbol: str, positions: list[PositionResponse]) -> int:

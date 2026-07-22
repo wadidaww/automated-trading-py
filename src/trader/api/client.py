@@ -7,7 +7,7 @@ import contextlib
 import random
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, overload
 
 import pandas as pd
 from futu import (
@@ -275,8 +275,6 @@ class FutuClient:
         if price is None:
             raise RuntimeError("market snapshot missing price columns")
         stock_name = self._extract_first_str(row, ("name",), fallback=response_symbol)
-        if stock_name is None:
-            stock_name = response_symbol
         return StockInfoResponse(
             symbol=response_symbol,
             name=stock_name,
@@ -293,8 +291,8 @@ class FutuClient:
         symbol: str = SYMBOL_FIELD,
         qty: int = QTY_FIELD,
         side: TradeSide = SIDE_FIELD,
-        price: float | None = PRICE_FIELD,
         order_type: str = ORDER_TYPE_FIELD,
+        price: float | None = PRICE_FIELD,
     ) -> OrderResponse:
         """Place an order.
 
@@ -324,7 +322,7 @@ class FutuClient:
         payload_df = Payload.df_payload(
             await asyncio.to_thread(
                 self._trade_ctx.place_order,
-                MARKET_ORDER_PRICE if resolved_price is None else resolved_price,
+                resolved_price,
                 qty,
                 symbol,
                 side,
@@ -469,6 +467,16 @@ class FutuClient:
         if value is None:
             return fallback
         return int(value)
+
+    @overload
+    @staticmethod
+    def _extract_first_str(row: pd.Series, columns: tuple[str, ...], fallback: str) -> str: ...
+
+    @overload
+    @staticmethod
+    def _extract_first_str(
+        row: pd.Series, columns: tuple[str, ...], fallback: None
+    ) -> None: ...
 
     @staticmethod
     def _extract_first_str(
