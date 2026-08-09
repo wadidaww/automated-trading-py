@@ -27,5 +27,8 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
 
     async def process(self, item: QuoteEvent) -> FeatureWindow:
         """Process input event."""
-        z_score = MathFormula.calc_z_score(item.price, self.mean, self.std_dev)
+        if self.std_dev == 0:
+            z_score = 0.0
+        else:
+            z_score = MathFormula.calc_z_score(item.price, self.mean, self.std_dev)
         return FeatureWindow(symbol=item.symbol, price=item.price, z_score=z_score)
