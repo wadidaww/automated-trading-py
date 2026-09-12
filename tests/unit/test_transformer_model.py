@@ -9,16 +9,7 @@ torch = pytest.importorskip("torch")
 
 from trader.model.base import Signal  # noqa: E402
 from trader.model.transformer_model import TransformerPriceModel  # noqa: E402
-
-
-def _features(rows: int = 8) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "close": [100.0 + index for index in range(rows)],
-            "volume": [1_000.0 + index * 10.0 for index in range(rows)],
-            "return_1d": [index / 100.0 for index in range(rows)],
-        }
-    )
+from helpers import model_features  # noqa: E402
 
 
 def test_transformer_predict_returns_signal_probabilities() -> None:
@@ -31,7 +22,7 @@ def test_transformer_predict_returns_signal_probabilities() -> None:
         dropout=0.0,
     )
 
-    prediction = model.predict(_features())
+    prediction = model.predict(model_features())
 
     assert prediction.signal in Signal
     assert 0.0 <= prediction.confidence <= 1.0
@@ -55,7 +46,7 @@ def test_transformer_fit_and_round_trip(tmp_path: Path) -> None:
     assert model.net is not None
     initial_head = model.net.head.weight.detach().clone()
 
-    model.fit(_features(), labels)
+    model.fit(model_features(), labels)
     assert model.net is not None
     assert not torch.allclose(initial_head, model.net.head.weight)
 
@@ -63,7 +54,7 @@ def test_transformer_fit_and_round_trip(tmp_path: Path) -> None:
     model.save(str(path))
 
     loaded = TransformerPriceModel.load(str(path))
-    prediction = loaded.predict(_features())
+    prediction = loaded.predict(model_features())
 
     assert prediction.signal in Signal
     assert prediction.metadata["window_size"] == 3

@@ -5,6 +5,7 @@ import pytest
 from trader.api.client import FutuClient, OrderResponse
 from trader.execution.order_manager import OrderManager, OrderState
 from futu import TrdSide
+from helpers import make_order
 
 
 @pytest.mark.asyncio
@@ -12,7 +13,7 @@ async def test_order_manager_state_transition(monkeypatch: pytest.MonkeyPatch) -
     async def _stub_place_order(
         self: FutuClient, symbol: str, qty: int, side: TrdSide
     ) -> OrderResponse:
-        return OrderResponse(order_id=f"{symbol}-{side}-{qty}", status="SUBMITTED")
+        return make_order(symbol, side, qty)
 
     monkeypatch.setattr(FutuClient, "place_order", _stub_place_order)
     manager = OrderManager(FutuClient())

@@ -6,11 +6,10 @@ from trader.api.client import (
     FutuClient,
     OrderResponse,
     PortfolioConditionResponse,
-    PortfolioResponse,
-    PositionResponse,
     StockInfoResponse,
 )
 from trader.execution.trading_service import TradingService
+from helpers import make_order, make_portfolio_condition, make_position, make_stock_info
 
 
 @pytest.mark.asyncio
@@ -20,35 +19,11 @@ async def test_trading_service_places_buy_and_sell_orders(
     prices = iter([95.0, 95.0, 110.0])
 
     async def _stock_info(self: FutuClient, symbol: str) -> StockInfoResponse:
-        return StockInfoResponse(
-            symbol=symbol,
-            name="Tencent",
-            price=next(prices) if symbol == "700.HK" else 0.0,
-            pe_ratio=12.0,
-            pb_ratio=1.5,
-            lot_size=100,
-            listing_date="2004-06-16",
-        )
+        return make_stock_info(symbol, next(prices) if symbol == "700.HK" else 0.0)
 
     async def _portfolio(self: FutuClient) -> PortfolioConditionResponse:
-        return PortfolioConditionResponse(
-            portfolio=PortfolioResponse(
-                account_id=1,
-                total_assets=2000.0,
-                market_value=1000.0,
-                cash=1000.0,
-                available_cash=800.0,
-            ),
-            positions=[
-                PositionResponse(
-                    symbol="700.HK",
-                    quantity=5,
-                    can_sell_qty=5,
-                    avg_cost=90.0,
-                    market_value=475.0,
-                    nominal_price=95.0,
-                )
-            ],
+        return make_portfolio_condition(
+            positions=[make_position("700.HK", 5, nominal_price=95.0, market_value=475.0)]
         )
 
     async def _place_order(
@@ -59,14 +34,7 @@ async def test_trading_service_places_buy_and_sell_orders(
         price: float | None = None,
         order_type: str = "MARKET",
     ) -> OrderResponse:
-        return OrderResponse(
-            order_id=f"{symbol}-{side}-{qty}",
-            status="SUBMITTED",
-            symbol=symbol,
-            order_side=side,
-            qty=qty,
-            price=price,
-        )
+        return make_order(symbol, side, qty, price=price)
 
     monkeypatch.setattr(FutuClient, "get_stock_info", _stock_info)
     monkeypatch.setattr(FutuClient, "get_portfolio_condition", _portfolio)
@@ -91,27 +59,10 @@ async def test_trading_service_rejects_orders_when_targets_not_met(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _stock_info(self: FutuClient, symbol: str) -> StockInfoResponse:
-        return StockInfoResponse(
-            symbol=symbol,
-            name="Tencent",
-            price=110.0,
-            pe_ratio=12.0,
-            pb_ratio=1.5,
-            lot_size=100,
-            listing_date="2004-06-16",
-        )
+        return make_stock_info(symbol, 110.0)
 
     async def _portfolio(self: FutuClient) -> PortfolioConditionResponse:
-        return PortfolioConditionResponse(
-            portfolio=PortfolioResponse(
-                account_id=1,
-                total_assets=1000.0,
-                market_value=0.0,
-                cash=1000.0,
-                available_cash=1000.0,
-            ),
-            positions=[],
-        )
+        return make_portfolio_condition(total_assets=1000.0, market_value=0.0, cash=1000.0)
 
     monkeypatch.setattr(FutuClient, "get_stock_info", _stock_info)
     monkeypatch.setattr(FutuClient, "get_portfolio_condition", _portfolio)

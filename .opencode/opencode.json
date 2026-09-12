@@ -1,0 +1,29 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "claude-3.5-sonnet",
+  "temperature": 0.2,
+  "maxTurns": 25,
+  "contextWindow": 128000,
+  "defaultMode": "agent",
+  "autoApprove": false,
+  "agent": {
+    "review": {
+      "description": "Reviews code for best practices and potential issues",
+      "mode": "subagent",
+      "model": "deepseek",
+      "temperature": 0.1
+    },
+    "implementation": {
+      "description": "Implements targeted fixes and feature work for this trading system",
+      "mode": "subagent",
+      "model": "claude-3.5-sonnet",
+      "temperature": 0.2
+    },
+    "debugging": {
+      "description": "Investigates failures, config issues, and environment problems",
+      "mode": "subagent",
+      "model": "gemini-2.5-pro",
+      "temperature": 0.1
+    }
+  }
+}
