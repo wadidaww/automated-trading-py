@@ -1,1 +1,1 @@
-"""Subpackage."""
+"""Market data utilities."""

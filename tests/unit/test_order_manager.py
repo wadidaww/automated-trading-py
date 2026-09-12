@@ -11,7 +11,12 @@ from helpers import make_order
 @pytest.mark.asyncio
 async def test_order_manager_state_transition(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _stub_place_order(
-        self: FutuClient, symbol: str, qty: int, side: TrdSide
+        self: FutuClient,
+        symbol: str,
+        qty: int,
+        side: TrdSide,
+        order_type: str = "MARKET",
+        price: float | None = None,
     ) -> OrderResponse:
         return make_order(symbol, side, qty)
 

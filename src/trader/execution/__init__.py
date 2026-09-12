@@ -1,1 +1,1 @@
-"""Subpackage."""
+"""Execution and order management."""

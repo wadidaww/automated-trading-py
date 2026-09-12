@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict, deque
 from dataclasses import dataclass
 
 from trader.api.quote_handler import QuoteEvent
@@ -19,16 +20,40 @@ class FeatureWindow:
 
 
 class DataStage(IStage[QuoteEvent, FeatureWindow]):
-    """Convert raw quotes to lightweight feature windows."""
+    """Convert raw quotes to lightweight feature windows.
 
-    def __init__(self, mean: float = 0.0, std_dev: float = 0.0) -> None:
-        self.mean = mean
-        self.std_dev = std_dev
+    Maintains a per-symbol rolling window of prices and computes z-score
+    from the actual rolling statistics rather than static values.
+    """
+
+    def __init__(self, window_size: int = 100) -> None:
+        self._window_size = window_size
+        self._prices: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=window_size))
 
     async def process(self, item: QuoteEvent) -> FeatureWindow:
-        """Process input event."""
-        if self.std_dev == 0:
-            z_score = 0.0
-        else:
-            z_score = MathFormula.calc_z_score(item.price, self.mean, self.std_dev)
+        """Process input event.
+
+        Appends the price to the rolling window and computes z-score
+        from the actual mean and standard deviation of recent prices.
+
+        Args:
+            item: Incoming quote event.
+
+        Returns:
+            FeatureWindow with computed z-score.
+        """
+        prices = self._prices[item.symbol]
+        prices.append(item.price)
+
+        if len(prices) < 2:
+            return FeatureWindow(symbol=item.symbol, price=item.price, z_score=0.0)
+
+        price_list = list(prices)
+        mean = MathFormula.calc_mean(price_list)
+        std_dev = MathFormula.calc_std_dev(price_list)
+
+        if std_dev == 0:
+            return FeatureWindow(symbol=item.symbol, price=item.price, z_score=0.0)
+
+        z_score = MathFormula.calc_z_score(item.price, mean, std_dev)
         return FeatureWindow(symbol=item.symbol, price=item.price, z_score=z_score)

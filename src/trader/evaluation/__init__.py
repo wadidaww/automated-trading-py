@@ -1,1 +1,1 @@
-"""Subpackage."""
+"""Backtesting and evaluation metrics."""

@@ -40,9 +40,30 @@ class OrderManager:
         self._seen_keys: set[str] = set()
 
     async def place_order(
-        self, symbol: str, qty: int, side: TradeSide, dedupe_key: str | None = None
+        self,
+        symbol: str,
+        qty: int,
+        side: TradeSide,
+        dedupe_key: str | None = None,
+        price: float | None = None,
+        order_type: str = "MARKET",
     ) -> ManagedOrder:
-        """Place order if dedupe key is unseen."""
+        """Place order if dedupe key is unseen.
+
+        Args:
+            symbol: Security code.
+            qty: Quantity in shares.
+            side: BUY or SELL.
+            dedupe_key: Optional idempotency key.
+            price: Limit price (required for LIMIT orders).
+            order_type: MARKET or LIMIT.
+
+        Returns:
+            ManagedOrder with updated state.
+
+        Raises:
+            ValueError: If dedupe_key was already used.
+        """
         key = dedupe_key or str(uuid.uuid4())
         if key in self._seen_keys:
             raise ValueError("duplicate order")
@@ -50,13 +71,23 @@ class OrderManager:
         managed = ManagedOrder(
             symbol=symbol, qty=qty, side=side, dedupe_key=key, state=OrderState.PENDING
         )
-        response = await self.client.place_order(symbol, qty, side)
+        response = await self.client.place_order(
+            symbol, qty, side, order_type=order_type, price=price
+        )
         managed.state = (
             OrderState.SUBMITTED if response.status == "SUBMITTED" else OrderState.REJECTED
         )
         return managed
 
     def transition(self, order: ManagedOrder, next_state: OrderState) -> ManagedOrder:
-        """Transition order state."""
+        """Transition order state.
+
+        Args:
+            order: Order to transition.
+            next_state: Target state.
+
+        Returns:
+            Updated order.
+        """
         order.state = next_state
         return order

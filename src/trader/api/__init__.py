@@ -1,1 +1,1 @@
-"""Subpackage."""
+"""Futu API client and handlers."""

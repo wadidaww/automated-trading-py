@@ -1,62 +1,79 @@
+"""Mathematical formula utilities."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+# Conversion factor: 1 unit of currency = 100 minor units (cents)
+_MINOR_UNITS_FACTOR = 100
+
+
+def to_minor_units(amount: float) -> int:
+    """Convert a currency amount to minor units (cents).
+
+    Args:
+        amount: Amount in major currency units (e.g. HKD).
+
+    Returns:
+        Amount in minor units (e.g. cents).
+    """
+    return int(amount * _MINOR_UNITS_FACTOR)
+
+
 class MathFormula:
-    @staticmethod
-    def calc_percentage_change(old_value, new_value) -> float:
-        """
-        Calculate the percentage change between two values.
-
-        :param old_value: The original value.
-        :param new_value: The new value.
-        :return: The percentage change as a float.
-        """
-        if old_value == 0:
-            raise ValueError("Old value cannot be zero for percentage change calculation.")
-
-        change = new_value - old_value
-        percentage_change = (change / old_value) * 100
-        return percentage_change
+    """Static mathematical helpers for indicator computation."""
 
     @staticmethod
-    def calc_z_score(value, mean, std_dev) -> float:
-        """
-        Calculate the z-score of a value.
+    def calc_z_score(value: float, mean: float, std_dev: float) -> float:
+        """Calculate the z-score of a value.
 
-        :param value: The value to calculate the z-score for.
-        :param mean: The mean of the dataset.
-        :param std_dev: The standard deviation of the dataset.
-        :return: The z-score as a float.
+        Args:
+            value: The value to calculate the z-score for.
+            mean: The mean of the dataset.
+            std_dev: The standard deviation of the dataset.
+
+        Returns:
+            The z-score as a float.
+
+        Raises:
+            ValueError: If std_dev is zero.
         """
         if std_dev == 0:
             raise ValueError("Standard deviation cannot be zero for z-score calculation.")
-
-        z_score = (value - mean) / std_dev
-        return z_score
+        return (value - mean) / std_dev
 
     @staticmethod
-    def calc_std_dev(data) -> float:
-        """
-        Calculate the standard deviation of a dataset.
+    def calc_std_dev(data: Sequence[float]) -> float:
+        """Calculate the population standard deviation of a dataset.
 
-        :param data: A list of numerical values.
-        :return: The standard deviation as a float.
+        Args:
+            data: A sequence of numerical values.
+
+        Returns:
+            The standard deviation as a float.
+
+        Raises:
+            ValueError: If data is empty.
         """
         if len(data) == 0:
             raise ValueError("Data list cannot be empty for standard deviation calculation.")
-
         mean = MathFormula.calc_mean(data)
         variance = sum((x - mean) ** 2 for x in data) / len(data)
-        std_dev = variance**0.5
-        return std_dev
+        return variance**0.5
 
     @staticmethod
-    def calc_mean(data) -> float:
-        """
-        Calculate the mean of a dataset.
+    def calc_mean(data: Sequence[float]) -> float:
+        """Calculate the arithmetic mean of a dataset.
 
-        :param data: A list of numerical values.
-        :return: The mean as a float.
+        Args:
+            data: A sequence of numerical values.
+
+        Returns:
+            The mean as a float.
+
+        Raises:
+            ValueError: If data is empty.
         """
         if len(data) == 0:
             raise ValueError("Data list cannot be empty for mean calculation.")
-
-        mean = sum(data) / len(data)
-        return mean
+        return sum(data) / len(data)

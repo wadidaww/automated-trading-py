@@ -82,7 +82,7 @@ class TransformerPriceNet(nn.Module):
         encoded = self.position(encoded)
         encoded = self.encoder(encoded)
         pooled = self.norm(encoded.mean(dim=1))
-        return cast(torch.Tensor, self.head(pooled))
+        return cast("torch.Tensor", self.head(pooled))
 
 
 class TransformerPriceModel(ISignalModel):

@@ -81,7 +81,7 @@ class AppConfig(BaseSettings):
 
 
 def load_config(path: str) -> AppConfig:
-    """Load YAML config file.
+    """Load YAML config file with env var interpolation.
 
     Args:
         path: Config path.
@@ -90,33 +90,26 @@ def load_config(path: str) -> AppConfig:
         AppConfig: Parsed config model.
     """
     payload = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    payload = _render_env_recursive(payload)
     return AppConfig(**payload)
 
 
-def render_env(value: str) -> str:
-    """Render ${ENV} syntax from current process env if present.
+def _render_env_recursive(obj: Any) -> Any:
+    """Recursively interpolate ${ENV} placeholders in nested structures.
 
     Args:
-        value: Raw text.
+        obj: Parsed YAML value (dict, list, str, or scalar).
 
     Returns:
-        str: Interpolated text.
+        Any: Value with env vars resolved.
     """
-    if value.startswith("${") and value.endswith("}"):
-        env_name = value[2:-1]
-        import os
+    import os
 
+    if isinstance(obj, str) and obj.startswith("${") and obj.endswith("}"):
+        env_name = obj[2:-1]
         return os.environ.get(env_name, "")
-    return value
-
-
-def flatten_dict(source: dict[str, Any]) -> dict[str, Any]:
-    """Return same dict; helper kept for extension.
-
-    Args:
-        source: Input mapping.
-
-    Returns:
-        dict[str, Any]: Copied mapping.
-    """
-    return dict(source)
+    if isinstance(obj, dict):
+        return {k: _render_env_recursive(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_render_env_recursive(item) for item in obj]
+    return obj

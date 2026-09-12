@@ -107,6 +107,24 @@ PRICE_FIELD = Field(default=None, ge=0, description="Limit price if needed")
 ORDER_TYPE_FIELD = Field(default="MARKET", pattern="^(MARKET|LIMIT)$")
 
 
+def find_position_by_symbol(
+    positions: list[PositionResponse], symbol: str
+) -> PositionResponse | None:
+    """Find a position for a specific symbol.
+
+    Args:
+        positions: List of current positions.
+        symbol: Security code to find.
+
+    Returns:
+        Matching PositionResponse or None if not found.
+    """
+    for pos in positions:
+        if pos.symbol == symbol:
+            return pos
+    return None
+
+
 @dataclass
 class TokenBucket:
     """Token bucket rate limiter."""
@@ -167,6 +185,15 @@ class FutuClient:
         self._bucket = TokenBucket.create(rate_limit_requests, rate_limit_window_s)
         self._quote_ctx: OpenQuoteContext | None = None
         self._trade_ctx: OpenSecTradeContext | None = None
+
+    @property
+    def is_connected(self) -> bool:
+        """Check if client is connected to OpenD gateway."""
+        return self._connected or self._paper_fallback
+
+    def _resolve_acc_id(self) -> int:
+        """Resolve account ID, falling back to DEFAULT_ACCOUNT_ID."""
+        return DEFAULT_ACCOUNT_ID if self.acc_id is None else self.acc_id
 
     async def __aenter__(self) -> FutuClient:
         """Open contexts and start heartbeat."""
@@ -328,13 +355,13 @@ class FutuClient:
                 side,
                 order_type=resolved_order_type,
                 trd_env=self.trd_env,
-                acc_id=DEFAULT_ACCOUNT_ID if self.acc_id is None else self.acc_id,
+                acc_id=self._resolve_acc_id(),
             )
         )
         if payload_df.empty:
             raise RuntimeError("empty order response")
-        order_id = Extractor._extract_row_value(payload_df, ("order_id",), f"{symbol}-{side}-{qty}")
-        status = Extractor._extract_row_value(payload_df, ("order_status",), "SUBMITTED")
+        order_id = Extractor.extract_row_value(payload_df, ("order_id",), f"{symbol}-{side}-{qty}")
+        status = Extractor.extract_row_value(payload_df, ("order_status",), "SUBMITTED")
         return OrderResponse(
             order_id=order_id,
             status=status,
@@ -367,7 +394,7 @@ class FutuClient:
             await asyncio.to_thread(
                 self._trade_ctx.order_list_query,
                 trd_env=self.trd_env,
-                acc_id=DEFAULT_ACCOUNT_ID if self.acc_id is None else self.acc_id,
+                acc_id=self._resolve_acc_id(),
             )
         )
         if symbol is not None and "code" in payload_df.columns:
@@ -392,7 +419,7 @@ class FutuClient:
             await asyncio.to_thread(
                 self._trade_ctx.position_list_query,
                 trd_env=self.trd_env,
-                acc_id=DEFAULT_ACCOUNT_ID if self.acc_id is None else self.acc_id,
+                acc_id=self._resolve_acc_id(),
             )
         )
         return [self._position_from_row(row) for _, row in payload_df.iterrows()]
@@ -401,7 +428,7 @@ class FutuClient:
         """Get current account portfolio condition."""
         await self._bucket.acquire()
         await self._ensure_connected()
-        account_id = DEFAULT_ACCOUNT_ID if self.acc_id is None else self.acc_id
+        account_id = self._resolve_acc_id()
         if self._paper_fallback or self._trade_ctx is None:
             return PortfolioResponse(
                 account_id=account_id,
