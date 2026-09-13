@@ -1,0 +1,18 @@
+services:
+  trader:
+    build: .
+    container_name: futu-trader
+    env_file: .env
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/models:/app/data/models
+      - ./logs:/app/logs
+    depends_on:
+      - mock-opend
+
+  mock-opend:
+    image: python:3.11-slim
+    container_name: mock-opend
+    command: python -m http.server 11111
+    ports:
+      - "11111:11111"

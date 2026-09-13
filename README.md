@@ -21,63 +21,85 @@ flowchart LR
 - Futu OpenD gateway
 - Futu paper trading account
 
-## Quick start (Docker Compose)
+## Quick start
+
+### 1. Environment setup
+
+```bash
+cp .env.example .env
+# Edit .env and set FUTU_ACCOUNT_ID
+```
+
+### 2. Docker Compose
 
 ```bash
 docker compose up --build
 ```
 
-## Configuration reference
-
-- `opend`: gateway host/port, heartbeat/reconnect, rate-limit
-- `trading`: account, symbols, limits, cooldown
-- `model`: model type/path/hot-reload/threshold
-- `pipeline`: queue and feature window sizing
-- `logging` and `metrics`: JSON log and Prometheus settings
-
-See `/config/config.*.yaml`.
-
-## Run backtests locally
+### 3. Local development
 
 ```bash
-python scripts/run_backtest.py --config config/config.staging.yaml
+conda activate futunn  # or your Python 3.11+ environment
+pip install -e ".[dev]"
 ```
+
+## Configuration
+
+Configuration files live under `config/` (`config.dev.yaml`, `config.staging.yaml`, `config.prod.yaml`).
+
+`${ENV}` placeholders (e.g. `${FUTU_ACCOUNT_ID}`) are resolved at runtime via `os.environ`.
+
+| Section     | Purpose                                     |
+|-------------|---------------------------------------------|
+| `opend`     | Gateway host/port, heartbeat, reconnect, rate-limit |
+| `trading`   | Account, symbols, limits, cooldown          |
+| `model`     | Model type/path/hot-reload/threshold        |
+| `pipeline`  | Queue and feature window sizing             |
+| `logging`   | JSON log output and rotation                |
+| `metrics`   | Prometheus metrics port                     |
+
+## Run backtests
+
+```bash
+PYTHONPATH=src python scripts/run_backtest.py
+```
+
+> **Note:** `run_backtest.py` currently runs `Backtester().run([])` regardless of CLI arguments.
 
 ## Train a model
 
-CLI:
 ```bash
-python -m trader.model.trainer --model mean_reversion --symbols 700.HK
+PYTHONPATH=src python -m trader.model.trainer --model mean_reversion --symbols 700.HK
 ```
+
 GitHub Actions: run `Model Train` workflow manually.
 
-## Paper trading validation
+## Paper trading
 
 ```bash
-python -m trader --mode paper --duration 3600
+PYTHONPATH=src python -m trader --mode paper --duration 3600
 ```
+
+Requires Futu OpenD gateway at `127.0.0.1:11111`. Without it, the client falls back to paper mode automatically.
 
 ## Production deployment
 
-Use `deploy-prod.yml` workflow with environment approval to build and deploy image.
+Use `deploy-prod.yml` workflow with environment approval to build and deploy the Docker image.
 
 ## Observability
 
-- Prometheus metrics: queue depth, throughput, dropped signals
+- Prometheus metrics: queue depth, throughput, stage-level counters
 - Grafana dashboard template: `docs/grafana_dashboard.json`
 
 ## Risk disclaimer
 
 Trading involves substantial risk of loss. Use paper trading and staged deployment before any live capital deployment. Ensure compliance with local laws and broker terms.
 
-## Conda setup
+## Development
 
-conda install --name base "conda>=26.5"
-conda install --name base conda-pypi
-<!-- conda create --name futunn --clone base -->
-conda pypi install futu-api
-conda list futu-api
-
-conda config --set solver rattler
-conda config --append channels conda-pypi
-conda config --set channel_priority flexible
+```bash
+ruff check src/ tests/
+ruff format --check .
+mypy src
+pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail-under=64
+```

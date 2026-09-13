@@ -8,6 +8,7 @@ __pycache__/
 coverage.xml
 data/raw/*
 data/processed/*
+!data/models/.gitkeep
 logs/
 futu-opend
 src/samples
