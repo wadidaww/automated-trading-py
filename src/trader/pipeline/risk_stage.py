@@ -131,7 +131,12 @@ class RiskStage(IStage[TradeSignal, ApprovedOrder | None]):
             return 1_000_000, 0, 0, 0, 0
 
     async def _compute_quantity(self, item: TradeSignal, portfolio_value_minor: int) -> int:
-        """Compute position size using Kelly criterion.
+        """Compute position size using Kelly criterion with confidence scaling.
+
+        Scales position size based on signal confidence:
+        - High confidence (>=0.85): Full Kelly allocation
+        - Medium confidence (0.70-0.85): 60% of Kelly allocation
+        - Low confidence (<0.70): 30% of Kelly allocation
 
         Falls back to qty=1 when Kelly returns 0 or when sizing fails.
 
@@ -153,11 +158,18 @@ class RiskStage(IStage[TradeSignal, ApprovedOrder | None]):
             if kelly_fraction <= 0:
                 return 1
 
+            if item.confidence >= 0.85:
+                size_multiplier = 1.0
+            elif item.confidence >= 0.70:
+                size_multiplier = 0.6
+            else:
+                size_multiplier = 0.3
+
             price_minor = to_minor_units(item.price)
             if price_minor <= 0:
                 return 1
 
-            notional_budget = int(portfolio_value_minor * kelly_fraction)
+            notional_budget = int(portfolio_value_minor * kelly_fraction * size_multiplier)
             qty = notional_budget // price_minor
             return max(1, min(qty, 1000))
         except Exception:

@@ -34,3 +34,14 @@ async def test_client_get_quote_and_place_order(monkeypatch: pytest.MonkeyPatch)
     assert portfolio.total_assets == 1500.0
     assert condition.positions[0].symbol == "700.HK"
     assert orders[0].avg_fill_price == 99.5
+
+
+@pytest.mark.asyncio
+async def test_paper_fallback_simulates_varying_prices() -> None:
+    async with FutuClient(allow_paper_fallback=True, max_retries=0) as client:
+        prices = []
+        for _ in range(50):
+            stock = await client.get_stock_info("700.HK")
+            prices.append(stock.price)
+    assert len(prices) == 50
+    assert len(set(prices)) > 1, "paper fallback should produce varying prices"

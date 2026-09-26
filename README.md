@@ -77,7 +77,7 @@ GitHub Actions: run `Model Train` workflow manually.
 ## Paper trading
 
 ```bash
-PYTHONPATH=src python -m trader --mode paper --duration 3600
+PYTHONPATH=src python -m trader --mode paper --duration 60
 ```
 
 Requires Futu OpenD gateway at `127.0.0.1:11111`. Without it, the client falls back to paper mode automatically.

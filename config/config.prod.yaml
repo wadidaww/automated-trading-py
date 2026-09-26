@@ -10,19 +10,19 @@ trading:
   market: "HK"
   symbols: ["700.HK"]
   order_type: "LIMIT"
-  max_position_notional_hkd: 50000
-  max_portfolio_notional_hkd: 500000
-  max_daily_loss_hkd: 10000
-  max_open_orders: 10
-  concentration_limit_pct: 0.2
-  signal_cooldown_s: 60
+  max_position_notional_hkd: 75000
+  max_portfolio_notional_hkd: 750000
+  max_daily_loss_hkd: 15000
+  max_open_orders: 15
+  concentration_limit_pct: 0.25
+  signal_cooldown_s: 45
 model:
   type: "mean_reversion"
   path: "data/models/model.pkl"
   hot_reload: false
-  confidence_threshold: 0.65
+  confidence_threshold: 0.60
 pipeline:
-  data_window_size: 100
+  data_window_size: 120
   feature_interval: "5m"
   queue_maxsize: 1000
 logging:

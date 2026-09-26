@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 
 from trader.api.client import FutuClient
 from trader.execution.order_manager import OrderManager
+from trader.model.base import ISignalModel
+from trader.model.ensemble import EnsembleSignalModel
 from trader.model.mean_reversion import MeanReversionModel
 from trader.pipeline.audit_stage import AuditStage
 from trader.pipeline.data_stage import DataStage
@@ -70,13 +72,58 @@ class DefaultPipelineFactory(IPipelineFactory):
         return DataStage(window_size=window_size)
 
     def create_signal_stage(self) -> SignalStage:
-        """Create SignalStage with configured model and threshold."""
-        model = MeanReversionModel()
-        threshold = 0.0
+        """Create SignalStage with configured model and threshold.
+
+        Supports model types:
+        - "mean_reversion": Enhanced mean reversion with momentum confirmation
+        - "ensemble": Weighted ensemble of mean reversion models
+        """
+        threshold = 0.65
+        model_type = "mean_reversion"
         if self._config is not None:
             threshold = self._config.model.confidence_threshold
-        logger.info("creating_signal_stage", confidence_threshold=threshold)
+            model_type = self._config.model.type
+
+        model = self._create_model(model_type)
+        logger.info(
+            "creating_signal_stage",
+            model_type=model_type,
+            confidence_threshold=threshold,
+        )
         return SignalStage(model, confidence_threshold=threshold)
+
+    def _create_model(self, model_type: str) -> ISignalModel:
+        """Create model instance based on type string."""
+        if model_type == "ensemble":
+            return self._create_ensemble_model()
+        if model_type == "gradient_boosting":
+            try:
+                from trader.model.gradient_boosting import GradientBoostingModel
+
+                return GradientBoostingModel()
+            except ImportError:
+                logger.warning("gradient_boosting_not_available, falling back to mean_reversion")
+        return MeanReversionModel()
+
+    def _create_ensemble_model(self) -> EnsembleSignalModel:
+        """Create ensemble model with multiple mean reversion variants."""
+        ensemble = EnsembleSignalModel()
+        ensemble.add_model(
+            MeanReversionModel(buy_threshold=-2.0, sell_threshold=2.0),
+            weight=0.4,
+            name="standard",
+        )
+        ensemble.add_model(
+            MeanReversionModel(buy_threshold=-1.5, sell_threshold=1.5),
+            weight=0.3,
+            name="aggressive",
+        )
+        ensemble.add_model(
+            MeanReversionModel(buy_threshold=-2.5, sell_threshold=2.5, volatility_adjust=True),
+            weight=0.3,
+            name="conservative",
+        )
+        return ensemble
 
     def create_risk_stage(self) -> RiskStage:
         """Create RiskStage with configured limits."""

@@ -185,6 +185,7 @@ class FutuClient:
         self._bucket = TokenBucket.create(rate_limit_requests, rate_limit_window_s)
         self._quote_ctx: OpenQuoteContext | None = None
         self._trade_ctx: OpenSecTradeContext | None = None
+        self._simulated_prices: dict[str, float] = {}
 
     @property
     def is_connected(self) -> bool:
@@ -282,10 +283,17 @@ class FutuClient:
         await self._bucket.acquire()
         await self._ensure_connected()
         if self._paper_fallback or self._quote_ctx is None:
+            if symbol not in self._simulated_prices:
+                self._simulated_prices[symbol] = 100.0
+            price = self._simulated_prices[symbol]
+            theta = 0.1
+            sigma = 0.5
+            price += theta * (100.0 - price) + sigma * random.gauss(0, 1)
+            self._simulated_prices[symbol] = price
             return StockInfoResponse(
                 symbol=symbol,
                 name=symbol,
-                price=100.0,
+                price=price,
                 pe_ratio=15.0,
                 pb_ratio=1.5,
                 lot_size=100,
@@ -298,14 +306,14 @@ class FutuClient:
             raise RuntimeError(f"no market snapshot for {symbol}")
         row = payload_df.iloc[0]
         response_symbol = Extractor.extract_symbol_from_payload(payload_df, fallback=symbol)
-        price = self._extract_first_float(row, ("last_price", "nominal_price"))
-        if price is None:
+        snapshot_price = self._extract_first_float(row, ("last_price", "nominal_price"))
+        if snapshot_price is None:
             raise RuntimeError("market snapshot missing price columns")
         stock_name = self._extract_required_str(row, ("name",), fallback=response_symbol)
         return StockInfoResponse(
             symbol=response_symbol,
             name=stock_name,
-            price=price,
+            price=snapshot_price,
             pe_ratio=self._extract_first_float(row, ("pe_ratio",)),
             pb_ratio=self._extract_first_float(row, ("pb_ratio",)),
             lot_size=self._extract_first_int(row, ("lot_size",)),
@@ -378,6 +386,7 @@ class FutuClient:
         if self._paper_fallback or self._trade_ctx is None:
             if symbol is None:
                 return []
+            sim_price = self._simulated_prices.get(symbol, 100.0)
             return [
                 OrderStatusResponse(
                     order_id=f"{symbol}-BUY-1",
@@ -386,8 +395,8 @@ class FutuClient:
                     order_side="BUY",
                     qty=1,
                     dealt_qty=1,
-                    price=100.0,
-                    avg_fill_price=100.0,
+                    price=sim_price,
+                    avg_fill_price=sim_price,
                 )
             ]
         payload_df = Payload.df_payload(

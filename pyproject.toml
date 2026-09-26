@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{ include = "trader", from = "src" }]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 futu-api = "^9.0"
 pandas = "^2.2"
 numpy = "^1.26"
@@ -42,7 +42,8 @@ types-pyyaml = "^6.0.12.20250516"
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
+exclude = ["src/samples"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "ANN", "S", "B", "A", "C4", "PT", "SIM", "TCH"]
@@ -65,8 +66,9 @@ ignore = [
 
 [tool.mypy]
 strict = true
-python_version = "3.11"
+python_version = "3.12"
 ignore_missing_imports = true
+exclude = ["src/samples/"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

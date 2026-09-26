@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 InputT = TypeVar("InputT")
 OutputT = TypeVar("OutputT")
 
 
-class IStage(ABC, Generic[InputT, OutputT]):
+class IStage[InputT, OutputT](ABC):
     """Common interface for all pipeline stages."""
 
     @abstractmethod
