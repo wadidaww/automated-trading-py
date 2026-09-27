@@ -55,13 +55,8 @@ def _build_client(config: AppConfig, mode: str) -> FutuClient:
     Returns:
         Configured FutuClient instance.
     """
-    trd_env = TrdEnv.SIMULATE if mode == "paper" else TrdEnv.REAL
-
     account_id = config.trading.account_id
-    acc_id: int | None = None
-    if account_id.isdigit():
-        acc_id = int(account_id)
-
+    acc_id = int(account_id) if account_id.isdigit() else None
     return FutuClient(
         host=config.opend.host,
         port=config.opend.port,
@@ -70,9 +65,51 @@ def _build_client(config: AppConfig, mode: str) -> FutuClient:
         rate_limit_requests=config.opend.rate_limit_requests,
         rate_limit_window_s=config.opend.rate_limit_window_s,
         trade_market=config.trading.market,
-        trd_env=trd_env,
+        trd_env=TrdEnv.SIMULATE if mode == "paper" else TrdEnv.REAL,
         acc_id=acc_id,
     )
+
+
+async def _run_pipeline(client: FutuClient, config: AppConfig, duration: int) -> None:
+    """Start the pipeline and quote poller, then run for the requested duration.
+
+    Args:
+        client: Connected FutuClient.
+        config: Application configuration.
+        duration: Runtime duration in seconds.
+    """
+    pipeline = TradingPipeline(config=config, client=client)
+    poller = QuotePoller(
+        client=client,
+        handler=QuoteHandler(pipeline.input_queue),
+        symbols=config.trading.symbols,
+        interval_s=float(config.trading.signal_cooldown_s),
+    )
+
+    await pipeline.start()
+    await poller.start()
+
+    logger.info(
+        "pipeline_running",
+        duration_s=duration,
+        symbols=config.trading.symbols,
+        interval_s=config.trading.signal_cooldown_s,
+    )
+
+    await asyncio.sleep(duration)
+    await _shutdown(poller, pipeline)
+
+
+async def _shutdown(poller: QuotePoller, pipeline: TradingPipeline) -> None:
+    """Stop polling, drain queued events, and stop the pipeline.
+
+    Args:
+        poller: Running quote poller.
+        pipeline: Running trading pipeline.
+    """
+    await poller.stop()
+    await pipeline.drain()
+    await pipeline.stop()
 
 
 async def run(mode: str, duration: int, config_path: str) -> None:
@@ -86,9 +123,7 @@ async def run(mode: str, duration: int, config_path: str) -> None:
     config = load_config(config_path)
     logger.info("config_loaded", config_path=config_path, mode=mode)
 
-    client = _build_client(config, mode)
-
-    async with client:
+    async with _build_client(config, mode) as client:
         logger.info(
             "opend_connected",
             host=config.opend.host,
@@ -96,31 +131,7 @@ async def run(mode: str, duration: int, config_path: str) -> None:
             mode=mode,
             trd_env=client.trd_env,
         )
-
-        pipeline = TradingPipeline(config=config, client=client)
-        handler = QuoteHandler(pipeline.input_queue)
-        poller = QuotePoller(
-            client=client,
-            handler=handler,
-            symbols=config.trading.symbols,
-            interval_s=float(config.trading.signal_cooldown_s),
-        )
-
-        await pipeline.start()
-        await poller.start()
-
-        logger.info(
-            "pipeline_running",
-            duration_s=duration,
-            symbols=config.trading.symbols,
-            interval_s=config.trading.signal_cooldown_s,
-        )
-
-        await asyncio.sleep(duration)
-
-        await poller.stop()
-        await pipeline.drain()
-        await pipeline.stop()
+        await _run_pipeline(client, config, duration)
 
     logger.info("pipeline_shutdown_complete")
 
@@ -135,10 +146,7 @@ async def health_check(config_path: str) -> None:
     client = _build_client(config, "paper")
     try:
         async with client:
-            if client.is_connected:
-                print("ok")
-            else:
-                print("ok (paper fallback)")
+            print("ok" if client.is_connected else "ok (paper fallback)")
     except Exception as exc:
         print(f"fail: {exc}")
 

@@ -50,9 +50,13 @@ class QuotePoller:
         """Poll quotes at fixed interval until cancelled."""
         while True:
             for symbol in self._symbols:
-                try:
-                    quote = await self._client.get_quote(symbol)
-                    await self._handler.on_quote(quote.symbol, quote.price)
-                except Exception:
-                    logger.warning("quote_fetch_failed", symbol=symbol, exc_info=True)
+                await self._poll_symbol(symbol)
             await asyncio.sleep(self._interval_s)
+
+    async def _poll_symbol(self, symbol: str) -> None:
+        """Fetch one symbol's quote and forward it to the handler."""
+        try:
+            quote = await self._client.get_quote(symbol)
+            await self._handler.on_quote(quote.symbol, quote.price)
+        except Exception:
+            logger.warning("quote_fetch_failed", symbol=symbol, exc_info=True)

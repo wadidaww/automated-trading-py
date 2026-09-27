@@ -6,8 +6,9 @@ import asyncio
 import contextlib
 import random
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, overload
 
 import pandas as pd
 from futu import (
@@ -100,11 +101,28 @@ class OrderStatusResponse(BaseModel):
 
 MARKET_ORDER_PRICE = 0.0
 DEFAULT_ACCOUNT_ID = 0
+SIMULATED_STARTING_CASH = 1_000_000.0
+SIMULATED_BASE_PRICE = 100.0
+SIMULATED_MEAN_REVERSION = 0.1
+SIMULATED_VOLATILITY = 0.5
+SIMULATED_PE_RATIO = 15.0
+SIMULATED_PB_RATIO = 1.5
+SIMULATED_LOT_SIZE = 100
+SIMULATED_LISTING_DATE = "2000-01-01"
 SYMBOL_FIELD = Field(..., description="Security code")
 QTY_FIELD = Field(..., gt=0, description="Quantity in shares")
 SIDE_FIELD = Field(..., pattern="^(BUY|SELL)$", description="BUY or SELL")
 PRICE_FIELD = Field(default=None, ge=0, description="Limit price if needed")
 ORDER_TYPE_FIELD = Field(default="MARKET", pattern="^(MARKET|LIMIT)$")
+
+TRADE_SIDES: dict[str, TradeSide] = {"BUY": "BUY", "SELL": "SELL"}
+ORDER_TYPES: dict[str, str] = {"MARKET": OrderType.MARKET, "LIMIT": OrderType.NORMAL}
+PORTFOLIO_AMOUNT_FIELDS: dict[str, tuple[str, ...]] = {
+    "total_assets": ("total_assets", "power", "net_assets"),
+    "market_value": ("market_val", "securities_assets"),
+    "cash": ("cash", "cash_balance"),
+    "available_cash": ("avl_withdrawal_cash", "available_funds", "max_power_short"),
+}
 
 
 def find_position_by_symbol(
@@ -119,13 +137,10 @@ def find_position_by_symbol(
     Returns:
         Matching PositionResponse or None if not found.
     """
-    for pos in positions:
-        if pos.symbol == symbol:
-            return pos
-    return None
+    return next((pos for pos in positions if pos.symbol == symbol), None)
 
 
-@dataclass
+@dataclass(slots=True)
 class TokenBucket:
     """Token bucket rate limiter."""
 
@@ -151,6 +166,141 @@ class TokenBucket:
                 self.tokens -= 1
                 return
             await asyncio.sleep(0.01)
+
+
+@overload
+def _extract_first[T](
+    row: pd.Series, columns: tuple[str, ...], converter: Callable[[Any], T], fallback: T
+) -> T: ...
+
+
+@overload
+def _extract_first[T](
+    row: pd.Series,
+    columns: tuple[str, ...],
+    converter: Callable[[Any], T],
+    fallback: None = None,
+) -> T | None: ...
+
+
+def _extract_first[T](
+    row: pd.Series,
+    columns: tuple[str, ...],
+    converter: Callable[[Any], T],
+    fallback: T | None = None,
+) -> T | None:
+    """Extract the first non-null candidate column of a DataFrame row.
+
+    Args:
+        row: Source DataFrame row.
+        columns: Candidate column names, checked in order.
+        converter: Callable applied to the first non-null cell.
+        fallback: Value returned when no candidate column holds data.
+
+    Returns:
+        The converted cell value, or fallback when nothing matched.
+    """
+    cell = next(
+        (row[column] for column in columns if column in row.index and pd.notna(row[column])),
+        None,
+    )
+    return converter(cell) if cell is not None else fallback
+
+
+def _as_int(value: Any) -> int:
+    """Coerce a raw cell to int through float so fractional strings truncate."""
+    return int(float(value))
+
+
+def _resolve_order_type(order_type: str) -> str:
+    """Resolve public order type string to Futu enum."""
+    return ORDER_TYPES.get(order_type, OrderType.NORMAL)
+
+
+def _resolve_order_price(resolved_order_type: str, price: float | None) -> float | None:
+    """Resolve the order price, requiring one for non-market orders."""
+    if resolved_order_type == OrderType.MARKET:
+        return MARKET_ORDER_PRICE
+    if price is None:
+        raise ValueError("LIMIT orders require a price parameter to be specified")
+    return price
+
+
+def _stock_info_from_snapshot(payload_df: pd.DataFrame, symbol: str) -> StockInfoResponse:
+    """Build a typed stock snapshot from a market snapshot payload.
+
+    Args:
+        payload_df: Snapshot payload returned by the quote context.
+        symbol: Requested security code, used as symbol/name fallback.
+
+    Returns:
+        StockInfoResponse: Typed snapshot.
+
+    Raises:
+        RuntimeError: When the payload is empty or lacks a price column.
+    """
+    if payload_df.empty:
+        raise RuntimeError(f"no market snapshot for {symbol}")
+    row = payload_df.iloc[0]
+    response_symbol = Extractor.extract_symbol_from_payload(payload_df, fallback=symbol)
+    price = _extract_first(row, ("last_price", "nominal_price"), float)
+    if price is None:
+        raise RuntimeError("market snapshot missing price columns")
+    return StockInfoResponse(
+        symbol=response_symbol,
+        name=_extract_first(row, ("name",), str, response_symbol),
+        price=price,
+        pe_ratio=_extract_first(row, ("pe_ratio",), float),
+        pb_ratio=_extract_first(row, ("pb_ratio",), float),
+        lot_size=_extract_first(row, ("lot_size",), _as_int),
+        listing_date=_extract_first(row, ("list_time",), str),
+    )
+
+
+def _portfolio_from_row(row: pd.Series, account_id: int) -> PortfolioResponse:
+    """Build a typed portfolio from an account info payload row."""
+    amounts: dict[str, Any] = {
+        field: _extract_first(row, columns, float, 0.0) or 0.0
+        for field, columns in PORTFOLIO_AMOUNT_FIELDS.items()
+    }
+    amounts.update(
+        unrealized_pnl=_extract_first(row, ("unrealized_pl", "holding_pl"), float),
+        realized_pnl=_extract_first(row, ("realized_pl",), float),
+    )
+    return PortfolioResponse(account_id=account_id, **amounts)
+
+
+def _position_from_row(row: pd.Series) -> PositionResponse:
+    """Build a typed position response from raw DataFrame row."""
+    return PositionResponse(
+        symbol=_extract_first(row, ("code", "stock_code"), str, "UNKNOWN"),
+        quantity=_extract_first(row, ("qty",), _as_int, 0) or 0,
+        can_sell_qty=_extract_first(row, ("can_sell_qty",), _as_int, 0) or 0,
+        avg_cost=_extract_first(row, ("cost_price", "cost_price_valid"), float, 0.0) or 0.0,
+        market_value=_extract_first(row, ("market_val",), float, 0.0) or 0.0,
+        nominal_price=_extract_first(row, ("nominal_price", "last_price"), float, 0.0) or 0.0,
+        unrealized_pnl=_extract_first(row, ("pl_val", "unrealized_pl"), float),
+    )
+
+
+def _order_status_from_row(row: pd.Series) -> OrderStatusResponse:
+    """Build a typed order status from raw DataFrame row."""
+    symbol = _extract_first(row, ("code", "stock_code"), str, "UNKNOWN")
+    order_id = _extract_first(row, ("order_id",), str, "")
+    status = _extract_first(row, ("order_status", "status"), str, "UNKNOWN")
+    if not order_id:
+        raise RuntimeError("order payload missing required field: order_id")
+    raw_side = _extract_first(row, ("trd_side", "side"), str)
+    return OrderStatusResponse(
+        order_id=order_id,
+        status=status,
+        symbol=symbol,
+        order_side=TRADE_SIDES.get(raw_side or ""),
+        qty=_extract_first(row, ("qty",), _as_int, 0) or 0,
+        dealt_qty=_extract_first(row, ("dealt_qty",), _as_int, 0) or 0,
+        price=_extract_first(row, ("price",), float),
+        avg_fill_price=_extract_first(row, ("dealt_avg_price", "avg_price"), float),
+    )
 
 
 class FutuClient:
@@ -207,18 +357,37 @@ class FutuClient:
         await self.close()
 
     async def connect(self) -> None:
-        """Connect with bounded retries and jitter."""
+        """Connect with bounded retries and jitter.
+
+        Raises:
+            ConnectionError: When the gateway is unreachable and paper fallback
+                is disabled.
+        """
+        if self.allow_paper_fallback and not await self._probe_gateway():
+            self._paper_fallback = True
+            return
+        if await self._open_contexts_with_retries():
+            return
         if self.allow_paper_fallback:
-            try:
-                _, writer = await asyncio.wait_for(
-                    asyncio.open_connection(self.host, self.port),
-                    timeout=self.connection_timeout_s,
-                )
-                writer.close()
-                await writer.wait_closed()
-            except (OSError, TimeoutError):
-                self._paper_fallback = True
-                return
+            self._paper_fallback = True
+            return
+        raise ConnectionError("failed to connect")
+
+    async def _probe_gateway(self) -> bool:
+        """Probe the OpenD TCP port, reporting whether it accepted a connection."""
+        try:
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(self.host, self.port),
+                timeout=self.connection_timeout_s,
+            )
+            writer.close()
+            await writer.wait_closed()
+            return True
+        except (OSError, TimeoutError):
+            return False
+
+    async def _open_contexts_with_retries(self) -> bool:
+        """Open quote/trade contexts with bounded retries, reporting success."""
         for attempt in range(self.max_retries):
             try:
                 self._quote_ctx = OpenQuoteContext(host=self.host, port=self.port)
@@ -227,15 +396,11 @@ class FutuClient:
                 )
                 _ = Payload.str_payload(await asyncio.to_thread(self._quote_ctx.get_global_state))
                 self._connected = True
-                return
+                return True
             except RuntimeError:
                 await asyncio.to_thread(self._close_contexts)
-                delay = min(2**attempt, 10) + random.random()
-                await asyncio.sleep(delay)
-        if self.allow_paper_fallback:
-            self._paper_fallback = True
-            return
-        raise ConnectionError("failed to connect")
+                await asyncio.sleep(min(2**attempt, 10) + random.random())
+        return False
 
     async def close(self) -> None:
         """Close API contexts."""
@@ -283,42 +448,31 @@ class FutuClient:
         await self._bucket.acquire()
         await self._ensure_connected()
         if self._paper_fallback or self._quote_ctx is None:
-            if symbol not in self._simulated_prices:
-                self._simulated_prices[symbol] = 100.0
-            price = self._simulated_prices[symbol]
-            theta = 0.1
-            sigma = 0.5
-            price += theta * (100.0 - price) + sigma * random.gauss(0, 1)
-            self._simulated_prices[symbol] = price
-            return StockInfoResponse(
-                symbol=symbol,
-                name=symbol,
-                price=price,
-                pe_ratio=15.0,
-                pb_ratio=1.5,
-                lot_size=100,
-                listing_date="2000-01-01",
-            )
+            return self._simulated_stock_info(symbol)
         payload_df = Payload.df_payload(
             await asyncio.to_thread(self._quote_ctx.get_market_snapshot, [symbol])
         )
-        if payload_df.empty:
-            raise RuntimeError(f"no market snapshot for {symbol}")
-        row = payload_df.iloc[0]
-        response_symbol = Extractor.extract_symbol_from_payload(payload_df, fallback=symbol)
-        snapshot_price = self._extract_first_float(row, ("last_price", "nominal_price"))
-        if snapshot_price is None:
-            raise RuntimeError("market snapshot missing price columns")
-        stock_name = self._extract_required_str(row, ("name",), fallback=response_symbol)
+        return _stock_info_from_snapshot(payload_df, symbol)
+
+    def _simulated_stock_info(self, symbol: str) -> StockInfoResponse:
+        """Build the paper-mode snapshot for a symbol."""
         return StockInfoResponse(
-            symbol=response_symbol,
-            name=stock_name,
-            price=snapshot_price,
-            pe_ratio=self._extract_first_float(row, ("pe_ratio",)),
-            pb_ratio=self._extract_first_float(row, ("pb_ratio",)),
-            lot_size=self._extract_first_int(row, ("lot_size",)),
-            listing_date=self._extract_first_str(row, ("list_time",), fallback=None),
+            symbol=symbol,
+            name=symbol,
+            price=self._advance_simulated_price(symbol),
+            pe_ratio=SIMULATED_PE_RATIO,
+            pb_ratio=SIMULATED_PB_RATIO,
+            lot_size=SIMULATED_LOT_SIZE,
+            listing_date=SIMULATED_LISTING_DATE,
         )
+
+    def _advance_simulated_price(self, symbol: str) -> float:
+        """Advance a symbol's paper-mode price with a mean-reverting random walk."""
+        price = self._simulated_prices.setdefault(symbol, SIMULATED_BASE_PRICE)
+        mean_reversion = SIMULATED_MEAN_REVERSION * (SIMULATED_BASE_PRICE - price)
+        price += mean_reversion + SIMULATED_VOLATILITY * random.gauss(0, 1)
+        self._simulated_prices[symbol] = price
+        return price
 
     @validate_call
     async def place_order(
@@ -341,22 +495,40 @@ class FutuClient:
         """
         await self._bucket.acquire()
         await self._ensure_connected()
-        resolved_order_type = self._resolve_order_type(order_type)
-        resolved_price = MARKET_ORDER_PRICE if resolved_order_type == OrderType.MARKET else price
-        if resolved_order_type != OrderType.MARKET and resolved_price is None:
-            raise ValueError("LIMIT orders require a price parameter to be specified")
+        resolved_order_type = _resolve_order_type(order_type)
+        resolved_price = _resolve_order_price(resolved_order_type, price)
         if self._paper_fallback or self._trade_ctx is None:
-            return OrderResponse(
-                order_id=f"{symbol}-{side}-{qty}",
-                status="SUBMITTED",
-                symbol=symbol,
-                order_side=side,
-                qty=qty,
-                price=resolved_price,
-            )
+            return self._simulated_order(symbol, side, qty, resolved_price)
+        return await self._submit_order(
+            self._trade_ctx, symbol, qty, side, resolved_order_type, resolved_price
+        )
+
+    def _simulated_order(
+        self, symbol: str, side: TradeSide, qty: int, price: float | None
+    ) -> OrderResponse:
+        """Build the paper-mode acknowledgement for an order."""
+        return OrderResponse(
+            order_id=f"{symbol}-{side}-{qty}",
+            status="SUBMITTED",
+            symbol=symbol,
+            order_side=side,
+            qty=qty,
+            price=price,
+        )
+
+    async def _submit_order(
+        self,
+        trade_ctx: OpenSecTradeContext,
+        symbol: str,
+        qty: int,
+        side: TradeSide,
+        resolved_order_type: str,
+        resolved_price: float | None,
+    ) -> OrderResponse:
+        """Send an order through the trade context and parse the acknowledgement."""
         payload_df = Payload.df_payload(
             await asyncio.to_thread(
-                self._trade_ctx.place_order,
+                trade_ctx.place_order,
                 resolved_price,
                 qty,
                 symbol,
@@ -384,21 +556,7 @@ class FutuClient:
         await self._bucket.acquire()
         await self._ensure_connected()
         if self._paper_fallback or self._trade_ctx is None:
-            if symbol is None:
-                return []
-            sim_price = self._simulated_prices.get(symbol, 100.0)
-            return [
-                OrderStatusResponse(
-                    order_id=f"{symbol}-BUY-1",
-                    status="FILLED",
-                    symbol=symbol,
-                    order_side="BUY",
-                    qty=1,
-                    dealt_qty=1,
-                    price=sim_price,
-                    avg_fill_price=sim_price,
-                )
-            ]
+            return self._simulated_orders(symbol)
         payload_df = Payload.df_payload(
             await asyncio.to_thread(
                 self._trade_ctx.order_list_query,
@@ -408,15 +566,33 @@ class FutuClient:
         )
         if symbol is not None and "code" in payload_df.columns:
             payload_df = payload_df[payload_df["code"] == symbol]
-        return [self._order_status_from_row(row) for _, row in payload_df.iterrows()]
+        return [_order_status_from_row(row) for _, row in payload_df.iterrows()]
+
+    def _simulated_orders(self, symbol: str | None) -> list[OrderStatusResponse]:
+        """Build the paper-mode order history for a symbol."""
+        if symbol is None:
+            return []
+        sim_price = self._simulated_prices.get(symbol, SIMULATED_BASE_PRICE)
+        return [
+            OrderStatusResponse(
+                order_id=f"{symbol}-BUY-1",
+                status="FILLED",
+                symbol=symbol,
+                order_side="BUY",
+                qty=1,
+                dealt_qty=1,
+                price=sim_price,
+                avg_fill_price=sim_price,
+            )
+        ]
 
     async def get_order_status(self, order_id: str) -> OrderStatusResponse:
         """Get one order status by order id."""
         orders = await self.list_orders()
-        for order in orders:
-            if order.order_id == order_id:
-                return order
-        raise RuntimeError(f"order not found: {order_id}")
+        order = next((candidate for candidate in orders if candidate.order_id == order_id), None)
+        if order is None:
+            raise RuntimeError(f"order not found: {order_id}")
+        return order
 
     async def get_positions(self) -> list[PositionResponse]:
         """Get current live positions."""
@@ -431,7 +607,7 @@ class FutuClient:
                 acc_id=self._resolve_acc_id(),
             )
         )
-        return [self._position_from_row(row) for _, row in payload_df.iterrows()]
+        return [_position_from_row(row) for _, row in payload_df.iterrows()]
 
     async def get_portfolio(self) -> PortfolioResponse:
         """Get current account portfolio condition."""
@@ -439,15 +615,7 @@ class FutuClient:
         await self._ensure_connected()
         account_id = self._resolve_acc_id()
         if self._paper_fallback or self._trade_ctx is None:
-            return PortfolioResponse(
-                account_id=account_id,
-                total_assets=1_000_000.0,
-                market_value=0.0,
-                cash=1_000_000.0,
-                available_cash=1_000_000.0,
-                unrealized_pnl=0.0,
-                realized_pnl=0.0,
-            )
+            return self._simulated_portfolio(account_id)
         payload_df = Payload.df_payload(
             await asyncio.to_thread(
                 self._trade_ctx.accinfo_query,
@@ -457,124 +625,21 @@ class FutuClient:
         )
         if payload_df.empty:
             raise RuntimeError("empty account info response")
-        row = payload_df.iloc[0]
+        return _portfolio_from_row(payload_df.iloc[0], account_id)
+
+    def _simulated_portfolio(self, account_id: int) -> PortfolioResponse:
+        """Build the paper-mode account snapshot."""
         return PortfolioResponse(
             account_id=account_id,
-            total_assets=self._extract_first_float(
-                row, ("total_assets", "power", "net_assets"), fallback=0.0
-            )
-            or 0.0,
-            market_value=self._extract_first_float(
-                row, ("market_val", "securities_assets"), fallback=0.0
-            )
-            or 0.0,
-            cash=self._extract_first_float(row, ("cash", "cash_balance"), fallback=0.0) or 0.0,
-            available_cash=self._extract_first_float(
-                row, ("avl_withdrawal_cash", "available_funds", "max_power_short"), fallback=0.0
-            )
-            or 0.0,
-            unrealized_pnl=self._extract_first_float(
-                row,
-                (
-                    "unrealized_pl",
-                    "holding_pl",
-                ),
-            ),
-            realized_pnl=self._extract_first_float(row, ("realized_pl",)),
+            total_assets=SIMULATED_STARTING_CASH,
+            market_value=0.0,
+            cash=SIMULATED_STARTING_CASH,
+            available_cash=SIMULATED_STARTING_CASH,
+            unrealized_pnl=0.0,
+            realized_pnl=0.0,
         )
 
     async def get_portfolio_condition(self) -> PortfolioConditionResponse:
         """Get combined account and position condition."""
         portfolio, positions = await asyncio.gather(self.get_portfolio(), self.get_positions())
         return PortfolioConditionResponse(portfolio=portfolio, positions=positions)
-
-    @staticmethod
-    def _extract_first_float(
-        row: pd.Series, columns: tuple[str, ...], fallback: float | None = None
-    ) -> float | None:
-        """Extract first numeric value from DataFrame row."""
-        for column in columns:
-            if column in row.index:
-                value = row[column]
-                if pd.notna(value):
-                    return float(value)
-        return fallback
-
-    @staticmethod
-    def _extract_first_int(
-        row: pd.Series, columns: tuple[str, ...], fallback: int | None = None
-    ) -> int | None:
-        """Extract first integer value from DataFrame row."""
-        value = FutuClient._extract_first_float(row, columns)
-        if value is None:
-            return fallback
-        return int(value)
-
-    @staticmethod
-    def _extract_first_str(
-        row: pd.Series, columns: tuple[str, ...], fallback: str | None = None
-    ) -> str | None:
-        """Extract first string value from DataFrame row."""
-        for column in columns:
-            if column in row.index:
-                value = row[column]
-                if pd.notna(value):
-                    return str(value)
-        return fallback
-
-    @classmethod
-    def _extract_required_str(cls, row: pd.Series, columns: tuple[str, ...], fallback: str) -> str:
-        """Extract first string value or return a required fallback."""
-        value = cls._extract_first_str(row, columns, fallback=fallback)
-        if value is None:
-            return fallback
-        return value
-
-    @staticmethod
-    def _resolve_order_type(order_type: str) -> int:
-        """Resolve public order type string to Futu enum."""
-        return OrderType.MARKET if order_type == "MARKET" else OrderType.NORMAL
-
-    @classmethod
-    def _position_from_row(cls, row: pd.Series) -> PositionResponse:
-        """Build a typed position response from raw DataFrame row."""
-        symbol = cls._extract_required_str(row, ("code", "stock_code"), fallback="UNKNOWN")
-        return PositionResponse(
-            symbol=symbol,
-            quantity=cls._extract_first_int(row, ("qty",), fallback=0) or 0,
-            can_sell_qty=cls._extract_first_int(row, ("can_sell_qty",), fallback=0) or 0,
-            avg_cost=cls._extract_first_float(row, ("cost_price", "cost_price_valid"), fallback=0.0)
-            or 0.0,
-            market_value=cls._extract_first_float(row, ("market_val",), fallback=0.0) or 0.0,
-            nominal_price=cls._extract_first_float(
-                row, ("nominal_price", "last_price"), fallback=0.0
-            )
-            or 0.0,
-            unrealized_pnl=cls._extract_first_float(row, ("pl_val", "unrealized_pl")),
-        )
-
-    @classmethod
-    def _order_status_from_row(cls, row: pd.Series) -> OrderStatusResponse:
-        """Build a typed order status from raw DataFrame row."""
-        symbol = cls._extract_required_str(row, ("code", "stock_code"), fallback="UNKNOWN")
-        order_id = cls._extract_required_str(row, ("order_id",), fallback="")
-        status = cls._extract_required_str(row, ("order_status", "status"), fallback="UNKNOWN")
-        if not order_id:
-            raise RuntimeError("order payload missing required field: order_id")
-        raw_side = cls._extract_first_str(row, ("trd_side", "side"), fallback=None)
-        if raw_side == "BUY":
-            side: TradeSide | None = "BUY"
-        elif raw_side == "SELL":
-            side = "SELL"
-        else:
-            side = None
-        return OrderStatusResponse(
-            order_id=order_id,
-            status=status,
-            symbol=symbol,
-            order_side=side,
-            qty=cls._extract_first_int(row, ("qty",), fallback=0) or 0,
-            dealt_qty=cls._extract_first_int(row, ("dealt_qty",), fallback=0) or 0,
-            price=cls._extract_first_float(row, ("price",)),
-            avg_fill_price=cls._extract_first_float(row, ("dealt_avg_price", "avg_price")),
-        )

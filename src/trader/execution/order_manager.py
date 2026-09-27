@@ -32,6 +32,12 @@ class ManagedOrder:
     state: OrderState = OrderState.PENDING
 
 
+_STATE_BY_RESPONSE_STATUS: dict[str, OrderState] = {
+    "SUBMITTED": OrderState.SUBMITTED,
+    "REJECTED": OrderState.REJECTED,
+}
+
+
 class OrderManager:
     """Simple order manager with in-memory idempotency."""
 
@@ -68,15 +74,12 @@ class OrderManager:
         if key in self._seen_keys:
             raise ValueError("duplicate order")
         self._seen_keys.add(key)
-        managed = ManagedOrder(
-            symbol=symbol, qty=qty, side=side, dedupe_key=key, state=OrderState.PENDING
-        )
+
+        managed = ManagedOrder(symbol=symbol, qty=qty, side=side, dedupe_key=key)
         response = await self.client.place_order(
             symbol, qty, side, order_type=order_type, price=price
         )
-        managed.state = (
-            OrderState.SUBMITTED if response.status == "SUBMITTED" else OrderState.REJECTED
-        )
+        managed.state = _STATE_BY_RESPONSE_STATUS.get(response.status, OrderState.REJECTED)
         return managed
 
     def transition(self, order: ManagedOrder, next_state: OrderState) -> ManagedOrder:

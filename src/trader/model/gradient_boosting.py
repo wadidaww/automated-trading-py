@@ -8,6 +8,8 @@ from sklearn.ensemble import GradientBoostingClassifier
 
 from trader.model.base import ISignalModel, Prediction, Signal
 
+_CLASS_SIGNALS: tuple[Signal, Signal, Signal] = (Signal.SELL, Signal.HOLD, Signal.BUY)
+
 
 class GradientBoostingModel(ISignalModel):
     """Sklearn GradientBoosting classifier wrapper."""
@@ -23,9 +25,10 @@ class GradientBoostingModel(ISignalModel):
         """Predict class and confidence."""
         probs = self.model.predict_proba(features.tail(1))[0]
         index = int(probs.argmax())
-        labels = [Signal.SELL, Signal.HOLD, Signal.BUY]
         return Prediction(
-            signal=labels[index], confidence=float(probs[index]), metadata={"probs": probs.tolist()}
+            signal=_CLASS_SIGNALS[index],
+            confidence=float(probs[index]),
+            metadata={"probs": probs.tolist()},
         )
 
     def save(self, path: str) -> None:

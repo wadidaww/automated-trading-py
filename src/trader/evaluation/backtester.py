@@ -6,18 +6,32 @@ import pandas as pd
 
 from trader.evaluation.metrics import Trade, max_drawdown, sharpe_ratio
 
+_DEFAULT_CURVE = (1.0, 1.01, 0.99, 1.03)
+_PNL_SCALE = 100_000
+
 
 class Backtester:
     """Simple event-driven backtester facade."""
 
+    @staticmethod
+    def _equity_curve(trades: list[Trade]) -> pd.Series:
+        """Build the equity curve for a list of trades.
+
+        Args:
+            trades: Completed trades in execution order.
+
+        Returns:
+            Series of portfolio values starting at 1.0.
+        """
+        if not trades:
+            return pd.Series(_DEFAULT_CURVE)
+        equity = [1.0]
+        for trade in trades:
+            equity.append(equity[-1] + trade.pnl_minor / _PNL_SCALE)
+        return pd.Series(equity)
+
     def run(self, trades: list[Trade]) -> dict[str, float]:
         """Run backtest and return key metrics."""
-        if not trades:
-            curve = pd.Series([1.0, 1.01, 0.99, 1.03])
-        else:
-            equity = [1.0]
-            for trade in trades:
-                equity.append(equity[-1] + trade.pnl_minor / 100_000)
-            curve = pd.Series(equity)
+        curve = self._equity_curve(trades)
         drawdown, _, _ = max_drawdown(curve)
         return {"sharpe": sharpe_ratio(curve), "max_drawdown": drawdown}

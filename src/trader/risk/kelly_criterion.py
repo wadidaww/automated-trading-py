@@ -31,12 +31,19 @@ class KellyCriterion:
         full_kelly = win_rate - ((1 - win_rate) / win_loss_ratio)
         if full_kelly <= 0:
             return 0.0
+        return max(0.0, full_kelly * self._confidence_fraction(win_rate))
 
+    def _confidence_fraction(self, win_rate: float) -> float:
+        """Pick the allocation fraction matching the confidence tier.
+
+        Args:
+            win_rate: Model confidence as proxy for win probability.
+
+        Returns:
+            Fraction of the full Kelly to allocate for this tier.
+        """
         if win_rate >= 0.85:
-            fraction = self._base_fraction
-        elif win_rate >= 0.75:
-            fraction = (self._base_fraction + self._min_fraction) / 2
-        else:
-            fraction = self._min_fraction
-
-        return max(0.0, full_kelly * fraction)
+            return self._base_fraction
+        if win_rate >= 0.75:
+            return (self._base_fraction + self._min_fraction) / 2
+        return self._min_fraction

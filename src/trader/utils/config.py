@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -90,8 +91,19 @@ def load_config(path: str) -> AppConfig:
         AppConfig: Parsed config model.
     """
     payload = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    payload = _render_env_recursive(payload)
-    return AppConfig(**payload)
+    return AppConfig(**_render_env_recursive(payload))
+
+
+def _is_env_placeholder(value: str) -> bool:
+    """Whether a string is a whole-value ``${NAME}`` placeholder.
+
+    Args:
+        value: String to test.
+
+    Returns:
+        bool: True when the string wraps an environment variable name.
+    """
+    return value.startswith("${") and value.endswith("}")
 
 
 def _render_env_recursive(obj: Any) -> Any:
@@ -103,13 +115,10 @@ def _render_env_recursive(obj: Any) -> Any:
     Returns:
         Any: Value with env vars resolved.
     """
-    import os
-
-    if isinstance(obj, str) and obj.startswith("${") and obj.endswith("}"):
-        env_name = obj[2:-1]
-        return os.environ.get(env_name, "")
+    if isinstance(obj, str):
+        return os.environ.get(obj[2:-1], "") if _is_env_placeholder(obj) else obj
     if isinstance(obj, dict):
-        return {k: _render_env_recursive(v) for k, v in obj.items()}
+        return {key: _render_env_recursive(value) for key, value in obj.items()}
     if isinstance(obj, list):
         return [_render_env_recursive(item) for item in obj]
     return obj

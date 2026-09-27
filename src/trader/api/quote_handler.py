@@ -16,11 +16,11 @@ class QuoteEvent:
     timestamp: datetime
 
 
+@dataclass(slots=True)
 class QuoteHandler:
     """Queue-based quote event emitter."""
 
-    def __init__(self, queue: asyncio.Queue[QuoteEvent]) -> None:
-        self.queue = queue
+    queue: asyncio.Queue[QuoteEvent]
 
     async def on_quote(self, symbol: str, price: float) -> None:
         """Emit quote event.

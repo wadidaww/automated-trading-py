@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import TypedDict
 
 from trader.api.client import FutuClient
 from trader.execution.order_manager import OrderManager
@@ -21,6 +23,16 @@ from trader.utils.logger import get_logger
 from trader.utils.maths import to_minor_units
 
 logger = get_logger("factory")
+
+
+class RiskEngineKwargs(TypedDict):
+    """Risk engine limit arguments shared by config and default construction."""
+
+    max_symbol_notional_minor: int
+    max_portfolio_notional_minor: int
+    max_daily_loss_minor: int
+    max_open_orders: int
+    concentration_limit_pct: float
 
 
 class IPipelineFactory(ABC):
@@ -62,6 +74,10 @@ class DefaultPipelineFactory(IPipelineFactory):
     ) -> None:
         self._config = config
         self._client = client or FutuClient()
+        self._model_builders: dict[str, Callable[[], ISignalModel]] = {
+            "ensemble": self._create_ensemble_model,
+            "gradient_boosting": self._create_gradient_boosting_model,
+        }
 
     def create_data_stage(self) -> DataStage:
         """Create DataStage with configured window size."""
@@ -93,17 +109,25 @@ class DefaultPipelineFactory(IPipelineFactory):
         return SignalStage(model, confidence_threshold=threshold)
 
     def _create_model(self, model_type: str) -> ISignalModel:
-        """Create model instance based on type string."""
-        if model_type == "ensemble":
-            return self._create_ensemble_model()
-        if model_type == "gradient_boosting":
-            try:
-                from trader.model.gradient_boosting import GradientBoostingModel
+        """Create model instance from the type registry.
 
-                return GradientBoostingModel()
-            except ImportError:
-                logger.warning("gradient_boosting_not_available, falling back to mean_reversion")
-        return MeanReversionModel()
+        Unknown types fall back to MeanReversionModel.
+        """
+        builder = self._model_builders.get(model_type)
+        if builder is None:
+            return MeanReversionModel()
+        return builder()
+
+    @staticmethod
+    def _create_gradient_boosting_model() -> ISignalModel:
+        """Create gradient boosting model, falling back to mean reversion."""
+        try:
+            from trader.model.gradient_boosting import GradientBoostingModel
+
+            return GradientBoostingModel()
+        except ImportError:
+            logger.warning("gradient_boosting_not_available, falling back to mean_reversion")
+            return MeanReversionModel()
 
     def _create_ensemble_model(self) -> EnsembleSignalModel:
         """Create ensemble model with multiple mean reversion variants."""
@@ -127,25 +151,28 @@ class DefaultPipelineFactory(IPipelineFactory):
 
     def create_risk_stage(self) -> RiskStage:
         """Create RiskStage with configured limits."""
-        if self._config is not None:
-            trading = self._config.trading
-            engine = RiskEngine(
-                max_symbol_notional_minor=to_minor_units(trading.max_position_notional_hkd),
-                max_portfolio_notional_minor=to_minor_units(trading.max_portfolio_notional_hkd),
-                max_daily_loss_minor=to_minor_units(trading.max_daily_loss_hkd),
-                max_open_orders=trading.max_open_orders,
-                concentration_limit_pct=trading.concentration_limit_pct,
-            )
-        else:
-            engine = RiskEngine(
+        engine = RiskEngine(**self._risk_engine_kwargs())
+        logger.info("creating_risk_stage")
+        return RiskStage(engine, client=self._client, kelly=KellyCriterion())
+
+    def _risk_engine_kwargs(self) -> RiskEngineKwargs:
+        """Resolve risk limits from config, falling back to safe defaults."""
+        if self._config is None:
+            return RiskEngineKwargs(
                 max_symbol_notional_minor=10_000_000,
                 max_portfolio_notional_minor=50_000_000,
                 max_daily_loss_minor=1_000_000,
                 max_open_orders=50,
                 concentration_limit_pct=0.5,
             )
-        logger.info("creating_risk_stage")
-        return RiskStage(engine, client=self._client, kelly=KellyCriterion())
+        trading = self._config.trading
+        return RiskEngineKwargs(
+            max_symbol_notional_minor=to_minor_units(trading.max_position_notional_hkd),
+            max_portfolio_notional_minor=to_minor_units(trading.max_portfolio_notional_hkd),
+            max_daily_loss_minor=to_minor_units(trading.max_daily_loss_hkd),
+            max_open_orders=trading.max_open_orders,
+            concentration_limit_pct=trading.concentration_limit_pct,
+        )
 
     def create_execution_stage(self) -> ExecutionStage:
         """Create ExecutionStage with shared client."""

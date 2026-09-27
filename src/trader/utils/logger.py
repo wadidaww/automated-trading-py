@@ -10,6 +10,11 @@ import structlog
 _CONFIGURED = False
 
 
+def _renderer() -> structlog.dev.ConsoleRenderer | structlog.processors.JSONRenderer:
+    """Pick the log renderer: human-readable under -O-less runs, JSON otherwise."""
+    return structlog.dev.ConsoleRenderer() if __debug__ else structlog.processors.JSONRenderer()
+
+
 def _configure_structlog() -> None:
     """Configure structlog once at module level."""
     global _CONFIGURED  # noqa: PLW0603
@@ -26,7 +31,7 @@ def _configure_structlog() -> None:
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
-            structlog.dev.ConsoleRenderer() if __debug__ else structlog.processors.JSONRenderer(),
+            _renderer(),
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,

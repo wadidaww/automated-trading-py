@@ -83,19 +83,34 @@ class TradingPipeline:
             item = await self.input_queue.get()
             try:
                 QUEUE_DEPTH.labels("input").set(self.input_queue.qsize())
-                data = await self.data_stage.process(item)
-                THROUGHPUT.labels("data").inc()
-                signal = await self.signal_stage.process(data)
-                THROUGHPUT.labels("signal").inc()
-                if signal is not None:
-                    approved = await self.risk_stage.process(signal)
-                    THROUGHPUT.labels("risk").inc()
-                    if approved is not None:
-                        receipt = await self.execution_stage.process(approved)
-                        THROUGHPUT.labels("execution").inc()
-                        await self.audit_stage.process(receipt)
-                        THROUGHPUT.labels("audit").inc()
+                await self._process_item(item)
             except Exception:
                 logger.warning("pipeline_stage_error", exc_info=True)
             finally:
                 self.input_queue.task_done()
+
+    async def _process_item(self, item: QuoteEvent) -> None:
+        """Run one quote through the stage chain, exiting early on rejections.
+
+        Args:
+            item: Quote event taken from the input queue.
+
+        Raises:
+            Exception: Propagated to the worker for stage-level logging.
+        """
+        data = await self.data_stage.process(item)
+        THROUGHPUT.labels("data").inc()
+        signal = await self.signal_stage.process(data)
+        THROUGHPUT.labels("signal").inc()
+        if signal is None:
+            return
+
+        approved = await self.risk_stage.process(signal)
+        THROUGHPUT.labels("risk").inc()
+        if approved is None:
+            return
+
+        receipt = await self.execution_stage.process(approved)
+        THROUGHPUT.labels("execution").inc()
+        await self.audit_stage.process(receipt)
+        THROUGHPUT.labels("audit").inc()

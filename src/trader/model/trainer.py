@@ -38,15 +38,19 @@ class ModelTrainer:
         Path(path).write_text(json.dumps(asdict(report)), encoding="utf-8")
 
 
+def _sample_training_data() -> tuple[pd.DataFrame, pd.Series]:
+    """Build the tiny built-in frame the CLI trains on."""
+    return pd.DataFrame({"z_score": [-1.0, -2.2, 2.5]}), pd.Series([0, 1, 2])
+
+
 def _cli() -> None:
+    """Parse CLI arguments and print a training report for the sample frame."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="mean_reversion")
     parser.add_argument("--symbols", default="700.HK")
     _ = parser.parse_args()
-    model = MeanReversionModel()
-    X = pd.DataFrame({"z_score": [-1.0, -2.2, 2.5]})
-    y = pd.Series([0, 1, 2])
-    report = ModelTrainer().train(model, X, y)
+    features, labels = _sample_training_data()
+    report = ModelTrainer().train(MeanReversionModel(), features, labels)
     print(report)
 
 

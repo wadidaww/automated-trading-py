@@ -12,7 +12,6 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from trader.model.base import ISignalModel, Prediction, Signal
 
-
 SIGNALS: tuple[Signal, Signal, Signal] = (Signal.SELL, Signal.HOLD, Signal.BUY)
 SIGNAL_TO_INDEX: dict[Signal, int] = {signal: index for index, signal in enumerate(SIGNALS)}
 INTEGER_TO_SIGNAL: dict[int, Signal] = {-1: Signal.SELL, 0: Signal.HOLD, 1: Signal.BUY}
@@ -122,51 +121,17 @@ class TransformerPriceModel(ISignalModel):
     def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
         """Train the transformer classifier on rolling feature windows."""
         features = self._prepare_features(X, fit=True)
-        target_indexes = y.map(self._target_to_index).to_numpy(dtype="int64")
-        targets = torch.tensor(target_indexes, dtype=torch.long)
-        windows, labels = self._build_training_windows(features, targets)
-
-        self._build_net()
-        if self.net is None:
-            msg = "model network was not initialized"
-            raise RuntimeError(msg)
-
-        torch.manual_seed(self.config.seed)
-        dataset = TensorDataset(windows, labels)
-        loader = DataLoader(dataset, batch_size=self.config.batch_size, shuffle=True)
-        optimizer = torch.optim.AdamW(self.net.parameters(), lr=self.config.learning_rate)
-        loss_fn = nn.CrossEntropyLoss()
-
-        self.net.train()
-        for _ in range(self.config.epochs):
-            for batch_x, batch_y in loader:
-                optimizer.zero_grad(set_to_none=True)
-                logits = self.net(batch_x)
-                loss = loss_fn(logits, batch_y)
-                loss.backward()
-                optimizer.step()
+        windows, labels = self._build_training_windows(features, self._targets(y))
+        self._train(self._build_net(), windows, labels)
 
     def predict(self, features: pd.DataFrame) -> Prediction:
         """Predict the next price-movement signal from the latest feature window."""
-        feature_tensor = self._prepare_features(features, fit=False)
-        window = self._latest_window(feature_tensor)
-
-        if self.net is None:
-            self._build_net()
-        if self.net is None:
-            msg = "model must be fitted or initialized with input_size before prediction"
-            raise ValueError(msg)
-
-        self.net.eval()
-        with torch.no_grad():
-            logits = self.net(window.unsqueeze(0))
-            probabilities = torch.softmax(logits, dim=-1).squeeze(0)
-
+        window = self._latest_window(self._prepare_features(features, fit=False))
+        probabilities = self._probabilities(window)
         index = int(probabilities.argmax().item())
-        confidence = float(probabilities[index].item())
         return Prediction(
             signal=SIGNALS[index],
-            confidence=confidence,
+            confidence=float(probabilities[index].item()),
             metadata={
                 "probabilities": {
                     signal.value: float(probabilities[signal_index].item())
@@ -196,47 +161,75 @@ class TransformerPriceModel(ISignalModel):
         """Load a serialized transformer model artifact."""
         payload: dict[str, Any] = torch.load(path, map_location="cpu", weights_only=True)
         config = payload["config"]
-        feature_columns_payload = payload.get("feature_columns")
-        feature_columns = (
-            feature_columns_payload
-            if isinstance(feature_columns_payload, list)
-            and all(isinstance(column, str) for column in feature_columns_payload)
-            else None
-        )
+        feature_columns = cls._parse_feature_columns(payload.get("feature_columns"))
         instance = cls(**config, feature_columns=feature_columns)
-        if instance.net is None:
-            instance._build_net()
-        if instance.net is None:
-            msg = "serialized transformer model is missing network configuration"
-            raise ValueError(msg)
-        instance.net.load_state_dict(payload["state_dict"])
-        instance.net.eval()
+        net = instance.net if instance.net is not None else instance._build_net()
+        net.load_state_dict(payload["state_dict"])
+        net.eval()
         return instance
 
-    def _build_net(self) -> None:
+    def _build_net(self) -> TransformerPriceNet:
+        """Create a freshly seeded network and remember it on the instance."""
         torch.manual_seed(self.config.seed)
-        self.net = TransformerPriceNet(self.config)
+        net = TransformerPriceNet(self.config)
+        self.net = net
+        return net
+
+    def _train(self, net: TransformerPriceNet, windows: torch.Tensor, labels: torch.Tensor) -> None:
+        """Run the configured number of training epochs over shuffled windows."""
+        torch.manual_seed(self.config.seed)
+        dataset = TensorDataset(windows, labels)
+        loader = DataLoader(dataset, batch_size=self.config.batch_size, shuffle=True)
+        optimizer = torch.optim.AdamW(net.parameters(), lr=self.config.learning_rate)
+        loss_fn = nn.CrossEntropyLoss()
+
+        net.train()
+        for _ in range(self.config.epochs):
+            for batch_x, batch_y in loader:
+                optimizer.zero_grad(set_to_none=True)
+                logits = net(batch_x)
+                loss = loss_fn(logits, batch_y)
+                loss.backward()
+                optimizer.step()
+
+    def _targets(self, y: pd.Series) -> torch.Tensor:
+        """Map signal labels onto integer class indexes."""
+        target_indexes = y.map(self._target_to_index).to_numpy(dtype="int64")
+        return torch.tensor(target_indexes, dtype=torch.long)
+
+    def _probabilities(self, window: torch.Tensor) -> torch.Tensor:
+        """Evaluate the network on one window and return its class probabilities."""
+        net = self.net if self.net is not None else self._build_net()
+        net.eval()
+        with torch.no_grad():
+            logits = net(window.unsqueeze(0))
+            return torch.softmax(logits, dim=-1).squeeze(0)
 
     def _prepare_features(self, features: pd.DataFrame, *, fit: bool) -> torch.Tensor:
         if features.empty:
             msg = "features must contain at least one row"
             raise ValueError(msg)
 
+        columns = self._resolve_columns(features, fit=fit)
+        frame = features.loc[:, columns].astype("float32")
+        if self.config.input_size is None:
+            self.config.input_size = len(columns)
+        return torch.tensor(frame.to_numpy(), dtype=torch.float32)
+
+    def _resolve_columns(self, features: pd.DataFrame, *, fit: bool) -> list[str]:
+        """Pin the feature schema and return the validated column order."""
         if fit or self.feature_columns is None:
             self.feature_columns = list(features.columns)
-        if not self.feature_columns:
+        columns = self.feature_columns
+        if not columns:
             msg = "features must contain at least one column"
             raise ValueError(msg)
 
-        missing = [column for column in self.feature_columns if column not in features.columns]
+        missing = [column for column in columns if column not in features.columns]
         if missing:
             msg = f"features are missing required columns: {missing}"
             raise ValueError(msg)
-
-        frame = features.loc[:, self.feature_columns].astype("float32")
-        if self.config.input_size is None:
-            self.config.input_size = len(self.feature_columns)
-        return torch.tensor(frame.to_numpy(), dtype=torch.float32)
+        return columns
 
     def _latest_window(self, features: torch.Tensor) -> torch.Tensor:
         """Return a fixed-size window, prepending zero rows when history is short."""
@@ -261,17 +254,18 @@ class TransformerPriceModel(ISignalModel):
         return windows, targets
 
     @staticmethod
+    def _parse_feature_columns(payload: object) -> list[str] | None:
+        """Recover a saved column schema, ignoring payloads of the wrong shape."""
+        if isinstance(payload, list) and all(isinstance(column, str) for column in payload):
+            return cast("list[str]", payload)
+        return None
+
+    @staticmethod
     def _target_to_index(value: object) -> int:
         if isinstance(value, Signal):
             return SIGNAL_TO_INDEX[value]
         if isinstance(value, str):
-            normalized_value = value.upper()
-            try:
-                return SIGNAL_TO_INDEX[Signal(normalized_value)]
-            except ValueError as exc:
-                valid_values = ", ".join(signal.value for signal in SIGNALS)
-                msg = f"invalid target signal string: {value!r}. Valid values are: {valid_values}"
-                raise ValueError(msg) from exc
+            return TransformerPriceModel._target_string_to_index(value)
         if isinstance(value, int) and value in INTEGER_TO_SIGNAL:
             return SIGNAL_TO_INDEX[INTEGER_TO_SIGNAL[value]]
 
@@ -280,3 +274,13 @@ class TransformerPriceModel(ISignalModel):
             f"got {value!r} of type {type(value).__name__}"
         )
         raise ValueError(msg)
+
+    @staticmethod
+    def _target_string_to_index(value: str) -> int:
+        """Map a signal string label onto its class index."""
+        try:
+            return SIGNAL_TO_INDEX[Signal(value.upper())]
+        except ValueError as exc:
+            valid_values = ", ".join(signal.value for signal in SIGNALS)
+            msg = f"invalid target signal string: {value!r}. Valid values are: {valid_values}"
+            raise ValueError(msg) from exc

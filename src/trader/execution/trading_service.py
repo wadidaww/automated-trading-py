@@ -47,16 +47,15 @@ class TradingService:
         """Check whether the market price has reached the configured targets."""
         stock_info, portfolio = await self._load_symbol_state(symbol)
         held_quantity = self._held_quantity(symbol, portfolio.positions)
+        price = stock_info.price
         return TargetEvaluation(
             symbol=symbol,
-            current_price=stock_info.price,
+            current_price=price,
             buy_target=buy_target,
             sell_target=sell_target,
             held_quantity=held_quantity,
-            buy_target_hit=buy_target is not None and stock_info.price <= buy_target,
-            sell_target_hit=(
-                sell_target is not None and held_quantity > 0 and stock_info.price >= sell_target
-            ),
+            buy_target_hit=buy_target is not None and price <= buy_target,
+            sell_target_hit=sell_target is not None and held_quantity > 0 and price >= sell_target,
         )
 
     async def place_buy_order(
@@ -70,7 +69,7 @@ class TradingService:
             symbol=symbol,
             qty=qty,
             side="BUY",
-            price=buy_target if order_type == "LIMIT" else None,
+            price=self._order_price(buy_target, order_type),
             order_type=order_type,
         )
 
@@ -90,7 +89,7 @@ class TradingService:
             symbol=symbol,
             qty=qty,
             side="SELL",
-            price=sell_target if order_type == "LIMIT" else None,
+            price=self._order_price(sell_target, order_type),
             order_type=order_type,
         )
 
@@ -107,9 +106,14 @@ class TradingService:
         )
 
     @staticmethod
+    def _order_price(target: float, order_type: str) -> float | None:
+        """Return the target as price for LIMIT orders, otherwise no price."""
+        return target if order_type == "LIMIT" else None
+
+    @staticmethod
     def _held_quantity(symbol: str, positions: list[PositionResponse]) -> int:
         """Get the held quantity for one symbol."""
-        for position in positions:
-            if position.symbol == symbol:
-                return position.quantity
-        return 0
+        return next(
+            (position.quantity for position in positions if position.symbol == symbol),
+            0,
+        )

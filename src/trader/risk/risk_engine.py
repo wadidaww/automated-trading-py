@@ -46,15 +46,17 @@ class RiskEngine:
         self.concentration_limit_pct = concentration_limit_pct
 
     def evaluate(self, inp: RiskInput) -> RiskDecision:
-        """Run all risk checks under 1ms budget."""
+        """Run all risk checks under a 1 ms budget.
+
+        Checks run in order; the first failing gate decides the rejection reason.
+        """
         started = perf_counter()
         proposed_notional = inp.quantity * inp.price_minor
-        if inp.current_symbol_notional_minor + proposed_notional > self.max_symbol_notional_minor:
+        symbol_notional = inp.current_symbol_notional_minor + proposed_notional
+        if symbol_notional > self.max_symbol_notional_minor:
             return RiskDecision(False, "symbol_notional_limit")
-        if (
-            inp.current_portfolio_notional_minor + proposed_notional
-            > self.max_portfolio_notional_minor
-        ):
+        portfolio_notional = inp.current_portfolio_notional_minor + proposed_notional
+        if portfolio_notional > self.max_portfolio_notional_minor:
             return RiskDecision(False, "portfolio_notional_limit")
         if -inp.daily_pnl_minor > self.max_daily_loss_minor:
             return RiskDecision(False, "daily_loss_limit")
@@ -62,12 +64,8 @@ class RiskEngine:
             return RiskDecision(False, "open_orders_limit")
         if inp.portfolio_value_minor <= 0:
             return RiskDecision(False, "zero_portfolio_value")
-        concentration = (
-            inp.current_symbol_notional_minor + proposed_notional
-        ) / inp.portfolio_value_minor
-        if concentration > self.concentration_limit_pct:
+        if symbol_notional / inp.portfolio_value_minor > self.concentration_limit_pct:
             return RiskDecision(False, "concentration_limit")
-        elapsed_ms = (perf_counter() - started) * 1000
-        if elapsed_ms >= 1.0:
+        if (perf_counter() - started) * 1000 >= 1.0:
             return RiskDecision(False, "latency_budget_exceeded")
         return RiskDecision(True, "approved")

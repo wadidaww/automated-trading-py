@@ -63,10 +63,7 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
         price_list = list(prices)
         mean = MathFormula.calc_mean(price_list)
         std_dev = MathFormula.calc_std_dev(price_list)
-
-        z_score = 0.0
-        if std_dev > 0:
-            z_score = MathFormula.calc_z_score(item.price, mean, std_dev)
+        z_score = MathFormula.calc_z_score(item.price, mean, std_dev) if std_dev > 0 else 0.0
 
         momentum = self._compute_momentum(price_list)
         trend_strength = self._compute_trend_strength(price_list)
@@ -117,9 +114,7 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
         """Compute rolling volatility (annualized)."""
         if len(prices) < 10:
             return 0.0
-        returns = [(prices[i] / prices[i - 1] - 1) for i in range(1, len(prices))]
-        if len(returns) < 2:
-            return 0.0
+        returns = [prices[i] / prices[i - 1] - 1 for i in range(1, len(prices))]
         mean_ret = sum(returns) / len(returns)
         variance = sum((r - mean_ret) ** 2 for r in returns) / (len(returns) - 1)
         return variance**0.5
@@ -131,12 +126,10 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
             return 50.0
         deltas = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
         recent = deltas[-period:]
-        gains = [d for d in recent if d > 0]
-        losses = [-d for d in recent if d < 0]
-        avg_gain = sum(gains) / period if gains else 0.0
-        avg_loss = sum(losses) / period if losses else 0.0001
-        rs = avg_gain / avg_loss
-        return 100 - (100 / (1 + rs))
+        avg_gain = sum(d for d in recent if d > 0) / period
+        total_loss = sum(-d for d in recent if d < 0)
+        avg_loss = total_loss / period if total_loss else 0.0001
+        return 100 - 100 / (1 + avg_gain / avg_loss)
 
     @staticmethod
     def _compute_bb_position(prices: list[float], mean: float, std_dev: float) -> float:

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+_TRADING_DAYS = 252
+
 
 @dataclass(slots=True)
 class Trade:
@@ -28,8 +30,8 @@ def sharpe_ratio(equity_curve: pd.Series, risk_free_rate: float = 0.04) -> float
     returns = equity_curve.pct_change().dropna()
     if returns.empty or returns.std() == 0:
         return 0.0
-    excess = returns.mean() - risk_free_rate / 252
-    return float((excess / returns.std()) * (252**0.5))
+    excess = returns.mean() - risk_free_rate / _TRADING_DAYS
+    return float((excess / returns.std()) * (_TRADING_DAYS**0.5))
 
 
 def max_drawdown(equity_curve: pd.Series) -> tuple[float, pd.Timestamp, pd.Timestamp]:

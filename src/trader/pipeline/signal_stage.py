@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import Final
 
 import pandas as pd
 
 from trader.model.base import ISignalModel, Signal
 from trader.pipeline.base import IStage
 from trader.pipeline.data_stage import FeatureWindow
+
+FEATURE_COLUMNS: Final[tuple[str, ...]] = (
+    "z_score",
+    "momentum",
+    "trend_strength",
+    "volatility",
+    "rsi",
+    "bb_position",
+    "price_acceleration",
+)
 
 
 @dataclass(slots=True)
@@ -47,17 +58,7 @@ class SignalStage(IStage[FeatureWindow, TradeSignal | None]):
         if now - last_time < self._cooldown_seconds:
             return None
 
-        features = pd.DataFrame(
-            {
-                "z_score": [item.z_score],
-                "momentum": [item.momentum],
-                "trend_strength": [item.trend_strength],
-                "volatility": [item.volatility],
-                "rsi": [item.rsi],
-                "bb_position": [item.bb_position],
-                "price_acceleration": [item.price_acceleration],
-            }
-        )
+        features = pd.DataFrame({name: [getattr(item, name)] for name in FEATURE_COLUMNS})
         prediction = self.model.predict(features)
         if prediction.confidence < self.confidence_threshold:
             return None
