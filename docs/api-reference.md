@@ -16,6 +16,7 @@ FutuClient(
     trd_env=TrdEnv.SIMULATE,
     acc_id=None,
     allow_paper_fallback=True,
+    connection_timeout_s=0.2,
 )
 ```
 
@@ -60,6 +61,18 @@ TradingPipeline(factory=None, config=None, client=None, queue_maxsize=1000)
 | `drain()` | Wait until in-flight queue is drained |
 | `submit(quote)` | Submit a QuoteEvent into the pipeline |
 
+### Stage types
+
+Stages chain via typed dataclasses; each stage implements `IStage[InputT, OutputT]`:
+
+| Type | Module | Fields |
+|------|--------|--------|
+| `QuoteEvent` | `trader.api.quote_handler` | symbol, price, timestamp |
+| `FeatureWindow` | `trader.pipeline.data_stage` | symbol, price, z_score, momentum, trend_strength, volatility, rsi, bb_position, price_acceleration |
+| `TradeSignal` | `trader.pipeline.signal_stage` | symbol, signal, confidence, price |
+| `ApprovedOrder` | `trader.pipeline.risk_stage` | symbol, qty, side, price |
+| `OrderReceipt` | `trader.pipeline.execution_stage` | order_id, status |
+
 ## `DataNormalizer` (`src/trader/data/normalizer.py`)
 
 Stateless feature engineering. Static method `add_features(df)` adds: RSI-14, MACD, Bollinger Bands, VWAP, OBV, log return, realized volatility, z-score, and lag features.
@@ -67,6 +80,8 @@ Stateless feature engineering. Static method `add_features(df)` adds: RSI-14, MA
 ## `RiskEngine` (`src/trader/risk/risk_engine.py`)
 
 Hard-gate risk checks evaluated under 1ms. Inputs via `RiskInput` dataclass, outputs `RiskDecision(approved, reason)`.
+
+Gates run in order — first failure wins: `symbol_notional_limit`, `portfolio_notional_limit`, `daily_loss_limit`, `open_orders_limit`, `zero_portfolio_value`, `concentration_limit`, `latency_budget_exceeded`.
 
 ## `KellyCriterion` (`src/trader/risk/kelly_criterion.py`)
 
@@ -76,7 +91,9 @@ Fractional Kelly position sizing. `calculate(win_rate, win_loss_ratio)` returns 
 
 Abstract interface for signal models. Implement `predict(features)`, `fit(X, y)`, `save(path)`, `load(path)`.
 
-Implementations: `MeanReversionModel`, `GradientBoostingModel`, `LSTMModel`, `TransformerPriceModel`.
+Implementations: `MeanReversionModel`, `EnsembleSignalModel`, `GradientBoostingModel`, `TransformerPriceModel`.
+
+Selected via `model.type` in config: `mean_reversion` (default), `ensemble`, `gradient_boosting` (falls back to `mean_reversion` if scikit-learn is unavailable).
 
 ## `OrderManager` (`src/trader/execution/order_manager.py`)
 

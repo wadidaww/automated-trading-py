@@ -4,7 +4,7 @@
 
 - Futu OpenD gateway running at `127.0.0.1:11111` (or use `mock-opend` for testing)
 - `FUTU_ACCOUNT_ID` set in environment or `.env`
-- Python 3.11+ with dependencies installed
+- Python 3.12+ with dependencies installed
 
 ## Local development
 
@@ -37,6 +37,17 @@ PYTHONPATH=src python scripts/run_backtest.py
 ```bash
 PYTHONPATH=src python -m trader.model.trainer --model mean_reversion --symbols 700.HK
 ```
+
+## Tests and quality gates
+
+```bash
+ruff check src/ tests/
+ruff format --check .
+mypy src
+PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail-under=64
+```
+
+`tests/e2e/` is excluded from CI; coverage gate is 64%.
 
 ## Docker deployment
 
