@@ -23,8 +23,18 @@ PYTHONPATH=src python -m trader --mode paper --duration 3600
 
 ```bash
 PYTHONPATH=src python -m trader --health-check
-# Output: "ok" or "ok (paper fallback)" or "fail: <error>"
 ```
+
+Runs four checks in order — `config_load`, `account_id_present` (warn only if
+`FUTU_ACCOUNT_ID` is unset), `opend_tcp_probe` (fast TCP reachability), and
+`opend_handshake` (futu protocol handshake, bounded at 5s). Dependent checks are
+reported as `skip` when their prerequisite failed.
+
+- stderr: structured report — `health_check_context`, one `health_check_check`
+  per check (`status=ok|warn|fail|skip`, `detail`, `duration_ms`), and a
+  `health_check_complete` summary (`passed`/`warned`/`failed`/`skipped`/`total`).
+- stdout: single result line — `ok` or `fail: <check>: <detail>`.
+- exit code: `0` when nothing failed (warnings allowed), `1` otherwise.
 
 ## Running backtests
 

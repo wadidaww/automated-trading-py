@@ -1,4 +1,7 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:conda",
-    "python-envs.defaultPackageManager": "ms-python.python:conda"
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "terminal.integrated.env.linux": {
+        "VSCODE_INIT_SCRIPT": "source ${workspaceFolder}/.vscode/setup.sh"
+    }
 }

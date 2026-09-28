@@ -18,6 +18,7 @@ from futu import (
     TrdEnv,
     TrdMarket,
 )
+from futu.common.constant import ContextStatus
 from pydantic import BaseModel, validate_call, Field
 
 from trader.api.typesafe.payload import Payload
@@ -363,7 +364,7 @@ class FutuClient:
             ConnectionError: When the gateway is unreachable and paper fallback
                 is disabled.
         """
-        if self.allow_paper_fallback and not await self._probe_gateway():
+        if self.allow_paper_fallback and not await self.probe_gateway():
             self._paper_fallback = True
             return
         if await self._open_contexts_with_retries():
@@ -373,7 +374,7 @@ class FutuClient:
             return
         raise ConnectionError("failed to connect")
 
-    async def _probe_gateway(self) -> bool:
+    async def probe_gateway(self) -> bool:
         """Probe the OpenD TCP port, reporting whether it accepted a connection."""
         try:
             _, writer = await asyncio.wait_for(
@@ -385,6 +386,36 @@ class FutuClient:
             return True
         except (OSError, TimeoutError):
             return False
+
+    async def verify_handshake(self, timeout_s: float = 5.0) -> bool:
+        """Verify the futu protocol handshake within a bounded time budget.
+
+        Uses an async-connect context so a dead or non-OpenD listener can never
+        block the caller the way the synchronous constructor's reconnect loop does.
+
+        Args:
+            timeout_s: Maximum seconds to wait for the context to become READY.
+
+        Returns:
+            bool: True when the handshake completed within the budget.
+        """
+        try:
+            ctx = await asyncio.to_thread(
+                OpenQuoteContext, self.host, self.port, is_async_connect=True
+            )
+        except Exception:
+            return False
+        deadline = time.monotonic() + timeout_s
+        try:
+            while time.monotonic() < deadline:
+                if ctx.status == ContextStatus.READY:
+                    return True
+                await asyncio.sleep(0.05)
+            return False
+        except Exception:
+            return False
+        finally:
+            await asyncio.to_thread(ctx.close)
 
     async def _open_contexts_with_retries(self) -> bool:
         """Open quote/trade contexts with bounded retries, reporting success."""

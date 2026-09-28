@@ -27,7 +27,7 @@ PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-report
 
 - Runtime config is YAML under `config/` (`config.dev.yaml`, `config.staging.yaml`, `config.prod.yaml`), validated by pydantic `AppConfig` in `src/trader/utils/config.py`.
 - `${ENV}` placeholders (e.g. `${FUTU_ACCOUNT_ID}`) **are interpolated** at load time via `_render_env_recursive()` called from `load_config()` (`src/trader/utils/config.py:84`). Set the corresponding environment variables or use a `.env` file.
-- Entrypoints: `python -m trader --mode paper --duration N --config <path>` (default `config/config.dev.yaml`; also `--health-check`, prints `ok` / `ok (paper fallback)` / `fail: <error>`), `python -m trader.model.trainer --model <type> --symbols <codes>`, `python scripts/run_backtest.py`. Note `scripts/run_backtest.py` ignores its `--config` arg (runs `Backtester().run([])` unconditionally).
+- Entrypoints: `python -m trader --mode paper --duration N --config <path>` (default `config/config.dev.yaml`; also `--health-check`, which runs `config_load` → `account_id_present` → `opend_tcp_probe` → `opend_handshake`, logs `health_check_check` / `health_check_context` / `health_check_complete` events to stderr, prints `ok` / `fail: <check>: <detail>` on stdout and exits 0/1 — a missing `FUTU_ACCOUNT_ID` only warns), `python -m trader.model.trainer --model <type> --symbols <codes>`, `python scripts/run_backtest.py`. Note `scripts/run_backtest.py` ignores its `--config` arg (runs `Backtester().run([])` unconditionally).
 - Live/paper runs require the Futu OpenD gateway at `127.0.0.1:11111`. The `mock-opend` compose service is just `python -m http.server 11111` (a stub, not a real gateway). `futu-opend/` holds the actual gateway binaries.
 
 ## Repo structure notes
