@@ -19,7 +19,8 @@ pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail
 ## Environment gotchas
 
 - The repo is Poetry-based (`pyproject.toml`, `poetry.lock`), but **Poetry is not installed** in the dev env and the root `.venv/` only contains `futu-api` (no pytest/ruff/mypy). Run the tools directly from the active conda env (`futu-api` itself is installed via `conda pypi install futu-api`, per README).
-- futu-api ships no type stubs: mypy uses `strict = true` with `ignore_missing_imports = true` (both `pyproject.toml` and `mypy.ini`).
+- futu-api ships no type stubs: `ignore_missing_imports = true`. `pyproject.toml` sets `strict = true`, but `mypy.ini` takes precedence and is **not** strict.
+- The code requires **Python ≥3.12** (PEP 695 generics, e.g. `api/typesafe/payload.py:9`); the Dockerfile and workflows still pin 3.11, where nothing imports and `mypy src` fails to parse.
 - Ruff config is duplicated in `.ruff.toml` and `pyproject.toml` (line-length 100, same lint select/ignore). Keep them in sync when editing one.
 
 ## Config
@@ -37,3 +38,9 @@ pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail
 - Git-ignored but present on disk: `futu-opend/`, `src/samples/` (Futu vendor SDK samples, incl. their own `SKILL.md`), `.vscode/`, `.venv/`. Edits inside these are never tracked by git.
 - CI: `ci.yml` (lint+test), `backtest.yml`, `model-train.yml`, `paper-trade.yml`, `deploy-prod.yml` (placeholder build + approval gate to `ghcr.io/<repo>:latest`). Dockerfile `ENTRYPOINT python -m trader`.
 - `scripts/fetch_historical_data.py` imports `trader.data.fetcher` which does not exist yet — the `model-train.yml` workflow will fail at that step.
+
+## Agents, skills, roadmap
+
+- `docs/production-roadmap.md`: consolidated review findings and the phased plan toward production.
+- `.claude/agents/`: `quantitative-developer`, `quant-researcher`, `futu-integration-engineer`, `low-latency-engineer`, `risk-manager` (read-only APPROVE/BLOCK), `trading-sre`.
+- `.claude/skills/`: `futu-opend`, `live-trading-safety`, `backtest-validation`, `hot-path-performance`, `add-strategy`. Load the matching skill before editing the area it covers. Any change to risk or execution gets a `risk-manager` review.
