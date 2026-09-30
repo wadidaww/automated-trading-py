@@ -8,7 +8,8 @@ opend:
 trading:
   account_id: "${FUTU_ACCOUNT_ID}"
   market: "HK"
-  symbols: ["700.HK"]
+  trd_env: "SIMULATE"  # REAL also needs --mode live and TRADER_LIVE_CONFIRM=1
+  symbols: ["HK.00700"]
   order_type: "LIMIT"
   max_position_notional_hkd: 75000
   max_portfolio_notional_hkd: 750000
@@ -16,6 +17,15 @@ trading:
   max_open_orders: 15
   concentration_limit_pct: 0.25
   signal_cooldown_s: 45
+risk:
+  max_order_qty: 2000
+  max_order_notional: 50000
+  max_orders_per_second: 2
+  max_orders_per_30s: 10  # Futu allows ~15 place_order per 30 s
+  price_band_pct: 0.02
+  allow_short: false
+  kill_switch_file: "run/KILL"
+  cancel_on_exit: true
 model:
   type: "mean_reversion"
   path: "data/models/model.pkl"

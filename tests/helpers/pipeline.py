@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from trader.api.client import FutuClient
 from trader.api.quote_handler import QuoteEvent
 from trader.pipeline.pipeline import TradingPipeline
 
@@ -14,11 +15,23 @@ _WARMUP_OFFSETS_PCT = (0.005, -0.005) * 15
 _DIP_PCT = 0.015
 
 
+class _StaticPriceClient(FutuClient):
+    """Paper-fallback client whose snapshot price is pinned, so the risk price band is stable."""
+
+    def __init__(self, price: float) -> None:
+        super().__init__()
+        self._pinned_price = price
+
+    def _advance_simulated_price(self, symbol: str) -> float:
+        return self._pinned_price
+
+
 async def run_pipeline(symbol: str, price: float, *, queue_maxsize: int = 64) -> TradingPipeline:
     """Run a warm-up series plus a mean-reversion dip through the pipeline."""
-    pipeline = TradingPipeline(queue_maxsize=queue_maxsize)
+    dip_price = price * (1 - _DIP_PCT)
+    pipeline = TradingPipeline(client=_StaticPriceClient(dip_price), queue_maxsize=queue_maxsize)
     await pipeline.start()
-    prices = [price * (1 + pct) for pct in _WARMUP_OFFSETS_PCT] + [price * (1 - _DIP_PCT)]
+    prices = [price * (1 + pct) for pct in _WARMUP_OFFSETS_PCT] + [dip_price]
     for px in prices:
         await pipeline.submit(QuoteEvent(symbol=symbol, price=px, timestamp=datetime.now(tz=UTC)))
     await pipeline.drain()

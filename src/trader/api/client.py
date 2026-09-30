@@ -115,6 +115,7 @@ QTY_FIELD = Field(..., gt=0, description="Quantity in shares")
 SIDE_FIELD = Field(..., pattern="^(BUY|SELL)$", description="BUY or SELL")
 PRICE_FIELD = Field(default=None, ge=0, description="Limit price if needed")
 ORDER_TYPE_FIELD = Field(default="MARKET", pattern="^(MARKET|LIMIT)$")
+REMARK_FIELD = Field(default=None, max_length=64, description="Client order id (Futu remark)")
 
 TRADE_SIDES: dict[str, TradeSide] = {"BUY": "BUY", "SELL": "SELL"}
 ORDER_TYPES: dict[str, str] = {"MARKET": OrderType.MARKET, "LIMIT": OrderType.NORMAL}
@@ -344,8 +345,19 @@ class FutuClient:
         return self._connected or self._paper_fallback
 
     def _resolve_acc_id(self) -> int:
-        """Resolve account ID, falling back to DEFAULT_ACCOUNT_ID."""
-        return DEFAULT_ACCOUNT_ID if self.acc_id is None else self.acc_id
+        """Resolve account ID.
+
+        SIMULATE falls back to DEFAULT_ACCOUNT_ID (Futu's first simulated account). REAL never
+        falls back: trading an account nobody named is refused.
+
+        Raises:
+            ValueError: When trading REAL without an explicit numeric account id.
+        """
+        if self.acc_id is not None:
+            return self.acc_id
+        if self.trd_env == TrdEnv.REAL:
+            raise ValueError("REAL trading requires an explicit numeric acc_id")
+        return DEFAULT_ACCOUNT_ID
 
     async def __aenter__(self) -> FutuClient:
         """Open contexts and start heartbeat."""
@@ -513,6 +525,7 @@ class FutuClient:
         side: TradeSide = SIDE_FIELD,
         order_type: str = ORDER_TYPE_FIELD,
         price: float | None = PRICE_FIELD,
+        remark: str | None = REMARK_FIELD,
     ) -> OrderResponse:
         """Place an order.
 
@@ -520,6 +533,9 @@ class FutuClient:
             symbol: Security code.
             qty: Quantity in shares.
             side: BUY or SELL.
+            order_type: MARKET or LIMIT.
+            price: Limit price (required for LIMIT orders).
+            remark: Client order id echoed back by Futu, used for reconciliation.
 
         Returns:
             OrderResponse: Typed response.
@@ -529,17 +545,22 @@ class FutuClient:
         resolved_order_type = _resolve_order_type(order_type)
         resolved_price = _resolve_order_price(resolved_order_type, price)
         if self._paper_fallback or self._trade_ctx is None:
-            return self._simulated_order(symbol, side, qty, resolved_price)
+            return self._simulated_order(symbol, side, qty, resolved_price, remark)
         return await self._submit_order(
-            self._trade_ctx, symbol, qty, side, resolved_order_type, resolved_price
+            self._trade_ctx, symbol, qty, side, resolved_order_type, resolved_price, remark
         )
 
     def _simulated_order(
-        self, symbol: str, side: TradeSide, qty: int, price: float | None
+        self,
+        symbol: str,
+        side: TradeSide,
+        qty: int,
+        price: float | None,
+        remark: str | None = None,
     ) -> OrderResponse:
         """Build the paper-mode acknowledgement for an order."""
         return OrderResponse(
-            order_id=f"{symbol}-{side}-{qty}",
+            order_id=remark or f"{symbol}-{side}-{qty}",
             status="SUBMITTED",
             symbol=symbol,
             order_side=side,
@@ -555,6 +576,7 @@ class FutuClient:
         side: TradeSide,
         resolved_order_type: str,
         resolved_price: float | None,
+        remark: str | None = None,
     ) -> OrderResponse:
         """Send an order through the trade context and parse the acknowledgement."""
         payload_df = Payload.df_payload(
@@ -567,12 +589,16 @@ class FutuClient:
                 order_type=resolved_order_type,
                 trd_env=self.trd_env,
                 acc_id=self._resolve_acc_id(),
+                remark=remark,
             )
         )
         if payload_df.empty:
             raise RuntimeError("empty order response")
-        order_id = Extractor.extract_row_value(payload_df, ("order_id",), f"{symbol}-{side}-{qty}")
-        status = Extractor.extract_row_value(payload_df, ("order_status",), "SUBMITTED")
+        order_id = Extractor.extract_row_value(payload_df, ("order_id",), "")
+        if not order_id:
+            raise RuntimeError("order response missing order_id")
+        # No status in the ack means we do not know yet: UNKNOWN keeps exposure counted.
+        status = Extractor.extract_row_value(payload_df, ("order_status",), "UNKNOWN")
         return OrderResponse(
             order_id=order_id,
             status=status,
@@ -668,6 +694,47 @@ class FutuClient:
             available_cash=SIMULATED_STARTING_CASH,
             unrealized_pnl=0.0,
             realized_pnl=0.0,
+        )
+
+    async def verify_account(self) -> None:
+        """Check that ``acc_id`` is one of this login's accounts for ``trd_env``.
+
+        Raises:
+            RuntimeError: When not connected to OpenD or the account is not listed.
+        """
+        acc_id = self._resolve_acc_id()
+        if self._paper_fallback or self._trade_ctx is None:
+            raise RuntimeError("cannot verify account without an OpenD trade context")
+        payload_df = Payload.df_payload(await asyncio.to_thread(self._trade_ctx.get_acc_list))
+        listed = {(int(row["acc_id"]), str(row["trd_env"])) for _, row in payload_df.iterrows()}
+        if (acc_id, str(self.trd_env)) not in listed:
+            raise RuntimeError(f"acc_id {acc_id} not found for trd_env {self.trd_env}")
+
+    async def unlock_trade(self, password_md5: str) -> None:
+        """Unlock trading for REAL orders with the MD5 of the trade password.
+
+        Raises:
+            RuntimeError: When not connected or OpenD refuses the unlock.
+        """
+        if self._paper_fallback or self._trade_ctx is None:
+            raise RuntimeError("cannot unlock trade without an OpenD trade context")
+        Payload.check(
+            await asyncio.to_thread(
+                self._trade_ctx.unlock_trade, password_md5=password_md5, is_unlock=True
+            )
+        )
+
+    async def cancel_all_orders(self) -> None:
+        """Cancel every working order on the account (kill switch / cancel-on-exit)."""
+        await self._ensure_connected()
+        if self._paper_fallback or self._trade_ctx is None:
+            return
+        Payload.check(
+            await asyncio.to_thread(
+                self._trade_ctx.cancel_all_order,
+                trd_env=self.trd_env,
+                acc_id=self._resolve_acc_id(),
+            )
         )
 
     async def get_portfolio_condition(self) -> PortfolioConditionResponse:

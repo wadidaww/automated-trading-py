@@ -91,3 +91,43 @@ async def test_verify_handshake_reports_construction_failure(
     monkeypatch.setattr(client_module, "OpenQuoteContext", _broken_context)
     client = FutuClient()
     assert await client.verify_handshake(timeout_s=0.1) is False
+
+
+async def test_client_live_account_controls(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(client_module, "OpenQuoteContext", FakeQuoteContext)
+    monkeypatch.setattr(client_module, "OpenSecTradeContext", FakeTradeContext)
+
+    async with FutuClient(
+        allow_paper_fallback=False, max_retries=1, trd_env="REAL", acc_id=281756479345015383
+    ) as client:
+        await client.verify_account()
+        await client.unlock_trade("md5hash")
+        await client.place_order(
+            "HK.00700", 100, "BUY", price=300.0, order_type="LIMIT", remark="c1"
+        )
+        await client.cancel_all_orders()
+        trade_ctx = client._trade_ctx
+    assert trade_ctx.unlocked_with == "md5hash"
+    assert trade_ctx.place_kwargs["remark"] == "c1"
+    assert trade_ctx.place_kwargs["acc_id"] == 281756479345015383
+    assert trade_ctx.cancel_all_calls == 1
+
+
+async def test_client_rejects_unlisted_real_account(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(client_module, "OpenQuoteContext", FakeQuoteContext)
+    monkeypatch.setattr(client_module, "OpenSecTradeContext", FakeTradeContext)
+
+    async with FutuClient(
+        allow_paper_fallback=False, max_retries=1, trd_env="REAL", acc_id=42
+    ) as client:
+        with pytest.raises(RuntimeError, match="not found"):
+            await client.verify_account()
+
+
+async def test_real_trading_never_defaults_the_account(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(client_module, "OpenQuoteContext", FakeQuoteContext)
+    monkeypatch.setattr(client_module, "OpenSecTradeContext", FakeTradeContext)
+
+    async with FutuClient(allow_paper_fallback=False, max_retries=1, trd_env="REAL") as client:
+        with pytest.raises(ValueError, match="acc_id"):
+            await client.place_order("HK.00700", 100, "BUY", price=300.0, order_type="LIMIT")

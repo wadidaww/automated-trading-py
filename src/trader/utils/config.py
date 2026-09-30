@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
-from typing import Any
-
 from datetime import date
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -57,24 +55,20 @@ class TradingSettings(BaseModel):
 
 
 class RiskSettings(BaseModel):
-    """Pre-trade and loss limits. Money values are in account currency major units."""
+    """Per-order limits, throttle and kill switch. Money values are account-currency major units.
 
-    max_order_qty: int = 10_000
-    max_order_notional: float = 50_000.0
-    max_position_notional: float = 100_000.0
-    max_gross_notional: float = 500_000.0
-    max_daily_loss: float = 10_000.0
-    max_open_orders: int = 10
-    concentration_limit_pct: float = 0.25
-    max_orders_per_second: int = 2
-    max_orders_per_30s: int = 12
+    Portfolio-level limits (position/portfolio notional, daily loss, open orders, concentration)
+    live under ``trading``.
+    """
+
+    max_order_qty: int = Field(default=10_000, gt=0)
+    max_order_notional: float = Field(default=50_000.0, gt=0)
+    max_orders_per_second: int = Field(default=2, gt=0)
+    max_orders_per_30s: int = Field(default=12, gt=0)
     price_band_pct: float = 0.02
-    max_quote_age_ms: int = 3_000
     allow_short: bool = False
     kill_switch_file: str = "run/KILL"
     cancel_on_exit: bool = True
-    # Kelly fraction multiplier applied on top of the model's edge estimate (fractional Kelly).
-    kelly_fraction: float = 0.25
 
     @model_validator(mode="after")
     def _check_limits(self) -> RiskSettings:
@@ -83,8 +77,6 @@ class RiskSettings(BaseModel):
             raise ValueError(f"max_orders_per_30s must be < {FUTU_MAX_ORDERS_PER_30S}")
         if not 0.0 < self.price_band_pct < 0.2:
             raise ValueError("price_band_pct must be in (0, 0.2)")
-        if not 0.0 < self.kelly_fraction <= 1.0:
-            raise ValueError("kelly_fraction must be in (0, 1]")
         return self
 
 
