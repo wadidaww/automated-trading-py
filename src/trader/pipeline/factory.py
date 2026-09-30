@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TypedDict
@@ -14,11 +15,13 @@ from trader.model.mean_reversion import MeanReversionModel
 from trader.pipeline.audit_stage import AuditStage
 from trader.pipeline.data_stage import DataStage
 from trader.pipeline.execution_stage import ExecutionStage
-from trader.pipeline.risk_stage import RiskStage
+from trader.pipeline.risk_stage import PreTradeLimits, RiskStage
 from trader.pipeline.signal_stage import SignalStage
 from trader.risk.kelly_criterion import KellyCriterion
+from trader.risk.kill_switch import KillSwitch
 from trader.risk.risk_engine import RiskEngine
-from trader.utils.config import AppConfig
+from trader.risk.throttle import OrderRateThrottle
+from trader.utils.config import AppConfig, RiskSettings
 from trader.utils.logger import get_logger
 from trader.utils.maths import to_minor_units
 
@@ -74,6 +77,10 @@ class DefaultPipelineFactory(IPipelineFactory):
     ) -> None:
         self._config = config
         self._client = client or FutuClient()
+        self._risk_settings = config.risk if config is not None else RiskSettings()
+        self.kill_switch = KillSwitch(self._risk_settings.kill_switch_file)
+        self.kill_switch.on_trip(self._cancel_all_on_trip)
+        self._background: set[asyncio.Task[None]] = set()
         self._model_builders: dict[str, Callable[[], ISignalModel]] = {
             "ensemble": self._create_ensemble_model,
             "gradient_boosting": self._create_gradient_boosting_model,
@@ -150,10 +157,46 @@ class DefaultPipelineFactory(IPipelineFactory):
         return ensemble
 
     def create_risk_stage(self) -> RiskStage:
-        """Create RiskStage with configured limits."""
+        """Create RiskStage with configured limits, the shared kill switch and a throttle."""
         engine = RiskEngine(**self._risk_engine_kwargs())
-        logger.info("creating_risk_stage")
-        return RiskStage(engine, client=self._client, kelly=KellyCriterion())
+        risk = self._risk_settings
+        limits = PreTradeLimits(
+            max_order_qty=risk.max_order_qty,
+            max_order_notional_minor=to_minor_units(risk.max_order_notional),
+            price_band_pct=risk.price_band_pct,
+            allow_short=risk.allow_short,
+        )
+        throttle = OrderRateThrottle(risk.max_orders_per_second, risk.max_orders_per_30s)
+        strategy = self._config.trading.strategy_name if self._config is not None else "default"
+        logger.info("creating_risk_stage", strategy=strategy)
+        return RiskStage(
+            engine,
+            client=self._client,
+            limits=limits,
+            kill_switch=self.kill_switch,
+            throttle=throttle,
+            kelly=KellyCriterion(),
+            strategy=strategy,
+        )
+
+    def _cancel_all_on_trip(self, reason: str) -> None:
+        """Kill-switch callback: cancel every working order in the background."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logger.error("kill_switch_cancel_skipped_no_loop", reason=reason)
+            return
+        task = loop.create_task(self._cancel_all(reason))
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def _cancel_all(self, reason: str) -> None:
+        """Cancel all working orders, logging (not raising) on failure."""
+        try:
+            await self._client.cancel_all_orders()
+            logger.warning("kill_switch_cancelled_all_orders", reason=reason)
+        except Exception:
+            logger.exception("kill_switch_cancel_all_failed", reason=reason)
 
     def _risk_engine_kwargs(self) -> RiskEngineKwargs:
         """Resolve risk limits from config, falling back to safe defaults."""

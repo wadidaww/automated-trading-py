@@ -26,6 +26,9 @@ class RiskInput:
     daily_pnl_minor: int
     open_orders: int
     portfolio_value_minor: int
+    # A SELL that only closes an existing long lowers exposure, so notional and
+    # concentration gates do not apply to it. Loss and open-order gates still do.
+    reduces_position: bool = False
 
 
 class RiskEngine:
@@ -51,21 +54,22 @@ class RiskEngine:
         Checks run in order; the first failing gate decides the rejection reason.
         """
         started = perf_counter()
-        proposed_notional = inp.quantity * inp.price_minor
-        symbol_notional = inp.current_symbol_notional_minor + proposed_notional
-        if symbol_notional > self.max_symbol_notional_minor:
-            return RiskDecision(False, "symbol_notional_limit")
-        portfolio_notional = inp.current_portfolio_notional_minor + proposed_notional
-        if portfolio_notional > self.max_portfolio_notional_minor:
-            return RiskDecision(False, "portfolio_notional_limit")
         if -inp.daily_pnl_minor > self.max_daily_loss_minor:
             return RiskDecision(False, "daily_loss_limit")
         if inp.open_orders >= self.max_open_orders:
             return RiskDecision(False, "open_orders_limit")
         if inp.portfolio_value_minor <= 0:
             return RiskDecision(False, "zero_portfolio_value")
-        if symbol_notional / inp.portfolio_value_minor > self.concentration_limit_pct:
-            return RiskDecision(False, "concentration_limit")
+        if not inp.reduces_position:
+            proposed_notional = inp.quantity * inp.price_minor
+            symbol_notional = inp.current_symbol_notional_minor + proposed_notional
+            if symbol_notional > self.max_symbol_notional_minor:
+                return RiskDecision(False, "symbol_notional_limit")
+            portfolio_notional = inp.current_portfolio_notional_minor + proposed_notional
+            if portfolio_notional > self.max_portfolio_notional_minor:
+                return RiskDecision(False, "portfolio_notional_limit")
+            if symbol_notional / inp.portfolio_value_minor > self.concentration_limit_pct:
+                return RiskDecision(False, "concentration_limit")
         if (perf_counter() - started) * 1000 >= 1.0:
             return RiskDecision(False, "latency_budget_exceeded")
         return RiskDecision(True, "approved")

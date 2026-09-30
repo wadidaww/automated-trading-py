@@ -37,9 +37,26 @@ class FakeTradeContext:
 
     def __init__(self, **_: object) -> None:
         self.closed = False
+        self.place_kwargs: dict[str, object] = {}
+        self.unlocked_with: str | None = None
+        self.cancel_all_calls = 0
 
-    def place_order(self, *_: object, **__: object) -> tuple[int, DataFrame]:
+    def place_order(self, *_: object, **kwargs: object) -> tuple[int, DataFrame]:
+        self.place_kwargs = kwargs
         return RET_OK, DataFrame({"order_id": ["123"], "order_status": ["SUBMITTED"]})
+
+    def get_acc_list(self) -> tuple[int, DataFrame]:
+        return RET_OK, DataFrame(
+            {"acc_id": [281756479345015383, 1], "trd_env": ["REAL", "SIMULATE"]}
+        )
+
+    def unlock_trade(self, password_md5: str | None = None, **_: object) -> tuple[int, None]:
+        self.unlocked_with = password_md5
+        return RET_OK, None
+
+    def cancel_all_order(self, **_: object) -> tuple[int, None]:
+        self.cancel_all_calls += 1
+        return RET_OK, None
 
     def order_list_query(self, **_: object) -> tuple[int, DataFrame]:
         return RET_OK, DataFrame(

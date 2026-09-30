@@ -6,7 +6,6 @@ import pandas as pd
 
 from trader.evaluation.metrics import Trade, max_drawdown, sharpe_ratio
 
-_DEFAULT_CURVE = (1.0, 1.01, 0.99, 1.03)
 _PNL_SCALE = 100_000
 
 
@@ -22,9 +21,12 @@ class Backtester:
 
         Returns:
             Series of portfolio values starting at 1.0.
+
+        Raises:
+            ValueError: When there are no trades; metrics are never fabricated.
         """
         if not trades:
-            return pd.Series(_DEFAULT_CURVE)
+            raise ValueError("backtest has no trades; refusing to report metrics")
         equity = [1.0]
         for trade in trades:
             equity.append(equity[-1] + trade.pnl_minor / _PNL_SCALE)

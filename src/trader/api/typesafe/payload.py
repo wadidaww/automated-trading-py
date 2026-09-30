@@ -51,3 +51,13 @@ class Payload:
             str: Converted string.
         """
         return _unwrap_payload(payload, str)
+
+    @staticmethod
+    def check(payload: tuple[int, object]) -> None:
+        """Raise when the SDK reported an error; ignore the data (e.g. unlock/cancel acks).
+
+        Raises:
+            RuntimeError: When the SDK reported an error.
+        """
+        if payload[0] == RET_ERROR:
+            raise RuntimeError(str(payload))

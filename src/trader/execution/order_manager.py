@@ -1,96 +1,87 @@
-"""Order management state machine."""
+"""Order management: idempotent sends and the order state machine."""
 
 from __future__ import annotations
 
-import uuid
-from dataclasses import dataclass
-from enum import Enum
-
 from trader.api.client import FutuClient
-from trader.misc.types.futu import TradeSide
+from trader.core.orders import (
+    ManagedOrder,
+    OrderIntent,
+    OrderStatus,
+    can_transition,
+    from_futu_status,
+)
+from trader.utils.logger import get_logger
+
+logger = get_logger("order_manager")
 
 
-class OrderState(Enum):
-    """Allowed order states."""
-
-    PENDING = "PENDING"
-    SUBMITTED = "SUBMITTED"
-    PARTIALLY_FILLED = "PARTIALLY_FILLED"
-    FILLED = "FILLED"
-    CANCELLED = "CANCELLED"
-    REJECTED = "REJECTED"
-
-
-@dataclass(slots=True)
-class ManagedOrder:
-    """Managed order payload."""
-
-    symbol: str
-    qty: int
-    side: TradeSide
-    dedupe_key: str
-    state: OrderState = OrderState.PENDING
-
-
-_STATE_BY_RESPONSE_STATUS: dict[str, OrderState] = {
-    "SUBMITTED": OrderState.SUBMITTED,
-    "REJECTED": OrderState.REJECTED,
-}
+class DuplicateOrderError(ValueError):
+    """An intent with this client order id was already sent."""
 
 
 class OrderManager:
-    """Simple order manager with in-memory idempotency."""
+    """Sends order intents at most once and tracks them by client order id.
+
+    The client order id travels to Futu in ``remark`` and the Futu ``order_id`` is stored on the
+    managed order, so broker state can be reconciled against local state.
+    """
 
     def __init__(self, client: FutuClient) -> None:
         self.client = client
-        self._seen_keys: set[str] = set()
+        self._orders: dict[str, ManagedOrder] = {}
 
-    async def place_order(
-        self,
-        symbol: str,
-        qty: int,
-        side: TradeSide,
-        dedupe_key: str | None = None,
-        price: float | None = None,
-        order_type: str = "MARKET",
-    ) -> ManagedOrder:
-        """Place order if dedupe key is unseen.
+    @property
+    def orders(self) -> dict[str, ManagedOrder]:
+        """Managed orders keyed by client order id."""
+        return self._orders
 
-        Args:
-            symbol: Security code.
-            qty: Quantity in shares.
-            side: BUY or SELL.
-            dedupe_key: Optional idempotency key.
-            price: Limit price (required for LIMIT orders).
-            order_type: MARKET or LIMIT.
+    def working_orders(self) -> list[ManagedOrder]:
+        """Orders that may still fill."""
+        return [order for order in self._orders.values() if order.status.is_working]
 
-        Returns:
-            ManagedOrder with updated state.
+    async def place(self, intent: OrderIntent) -> ManagedOrder:
+        """Send an intent as a LIMIT order, exactly once.
+
+        The order is registered as PENDING_NEW *before* the send, so a crash or exception
+        mid-send leaves it counted as working rather than forgotten. A send that raises is
+        marked UNKNOWN (the broker may or may not have it) until reconciliation.
 
         Raises:
-            ValueError: If dedupe_key was already used.
+            DuplicateOrderError: When the intent's client order id was already sent.
         """
-        key = dedupe_key or str(uuid.uuid4())
-        if key in self._seen_keys:
-            raise ValueError("duplicate order")
-        self._seen_keys.add(key)
-
-        managed = ManagedOrder(symbol=symbol, qty=qty, side=side, dedupe_key=key)
-        response = await self.client.place_order(
-            symbol, qty, side, order_type=order_type, price=price
-        )
-        managed.state = _STATE_BY_RESPONSE_STATUS.get(response.status, OrderState.REJECTED)
+        if intent.client_order_id in self._orders:
+            raise DuplicateOrderError(intent.client_order_id)
+        managed = ManagedOrder(intent=intent, updated_ns=intent.created_ns)
+        self._orders[intent.client_order_id] = managed
+        try:
+            response = await self.client.place_order(
+                intent.symbol,
+                intent.qty,
+                intent.side,
+                order_type="LIMIT",
+                price=intent.limit_price,
+                remark=intent.client_order_id,
+            )
+        except Exception:
+            self.apply_status(managed, OrderStatus.UNKNOWN)
+            raise
+        managed.broker_order_id = response.order_id
+        self.apply_status(managed, from_futu_status(response.status))
         return managed
 
-    def transition(self, order: ManagedOrder, next_state: OrderState) -> ManagedOrder:
-        """Transition order state.
-
-        Args:
-            order: Order to transition.
-            next_state: Target state.
+    def apply_status(self, order: ManagedOrder, status: OrderStatus) -> bool:
+        """Move an order to ``status`` if the state machine allows it.
 
         Returns:
-            Updated order.
+            bool: Whether the transition was applied.
         """
-        order.state = next_state
-        return order
+        if not can_transition(order.status, status):
+            logger.warning(
+                "illegal_order_transition",
+                client_order_id=order.intent.client_order_id,
+                current=order.status.value,
+                target=status.value,
+            )
+            return False
+        order.status = status
+        return True
