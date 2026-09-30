@@ -28,6 +28,7 @@ class FakeClient:
         self.orders: list[OrderStatusResponse] = []
         self.lot_size: int | None = 100
         self.fail = False
+        self.on_snapshot: Any = None
 
     async def get_portfolio(self) -> PortfolioResponse:
         if self.fail:
@@ -49,6 +50,8 @@ class FakeClient:
         return self.orders
 
     async def get_stock_info(self, symbol: str) -> Any:
+        if self.on_snapshot is not None:
+            self.on_snapshot()
         info = make_stock_info(symbol, 300.0)
         info.lot_size = self.lot_size
         return info
@@ -102,7 +105,7 @@ async def test_buy_is_rounded_to_tick_and_lot() -> None:
     assert intent.qty > 0
     assert intent.qty % 100 == 0
     assert intent.client_order_id.startswith("c")
-    assert intent.reference_price == pytest.approx(300.13)
+    assert intent.reference_price == pytest.approx(300.0)  # broker snapshot, not the signal
 
 
 async def test_hold_never_becomes_an_order() -> None:
@@ -203,3 +206,18 @@ async def test_client_order_ids_are_unique_per_intent() -> None:
     assert first is not None
     assert second is not None
     assert first.client_order_id != second.client_order_id
+
+
+async def test_price_band_uses_broker_reference() -> None:
+    stage = _stage(FakeClient())
+    assert await stage.process(_signal(price=320.0)) is None  # 6.7% away from the 300.0 snapshot
+    assert stage.reject_reasons == {"price_band": 1}
+
+
+async def test_kill_switch_tripped_during_broker_calls_blocks_the_order() -> None:
+    client = FakeClient()
+    kill_switch = KillSwitch()
+    client.on_snapshot = lambda: kill_switch.trip("signal:SIGUSR1")
+    stage = _stage(client, kill_switch=kill_switch)
+    assert await stage.process(_signal()) is None
+    assert stage.reject_reasons == {"kill_switch": 1}

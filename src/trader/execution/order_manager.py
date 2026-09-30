@@ -10,6 +10,7 @@ from trader.core.orders import (
     can_transition,
     from_futu_status,
 )
+from trader.risk.kill_switch import KillSwitch
 from trader.utils.logger import get_logger
 
 logger = get_logger("order_manager")
@@ -19,6 +20,10 @@ class DuplicateOrderError(ValueError):
     """An intent with this client order id was already sent."""
 
 
+class TradingHaltedError(RuntimeError):
+    """The kill switch is tripped; nothing is sent."""
+
+
 class OrderManager:
     """Sends order intents at most once and tracks them by client order id.
 
@@ -26,8 +31,9 @@ class OrderManager:
     managed order, so broker state can be reconciled against local state.
     """
 
-    def __init__(self, client: FutuClient) -> None:
+    def __init__(self, client: FutuClient, kill_switch: KillSwitch | None = None) -> None:
         self.client = client
+        self._kill_switch = kill_switch
         self._orders: dict[str, ManagedOrder] = {}
 
     @property
@@ -48,9 +54,12 @@ class OrderManager:
 
         Raises:
             DuplicateOrderError: When the intent's client order id was already sent.
+            TradingHaltedError: When the kill switch is tripped (checked last, right before send).
         """
         if intent.client_order_id in self._orders:
             raise DuplicateOrderError(intent.client_order_id)
+        if self._kill_switch is not None and self._kill_switch.is_tripped():
+            raise TradingHaltedError(self._kill_switch.reason or "kill_switch")
         managed = ManagedOrder(intent=intent, updated_ns=intent.created_ns)
         self._orders[intent.client_order_id] = managed
         try:

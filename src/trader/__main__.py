@@ -17,6 +17,7 @@ from trader.api.client import FutuClient
 from trader.api.quote_handler import QuoteHandler
 from trader.api.quote_poller import QuotePoller
 from trader.pipeline.pipeline import TradingPipeline
+from trader.risk.kill_switch import KillSwitch
 from trader.utils.config import AppConfig, load_config
 from trader.utils.logger import get_logger
 
@@ -173,14 +174,24 @@ async def _run_pipeline(client: FutuClient, config: AppConfig, duration: int) ->
         interval_s=config.trading.signal_cooldown_s,
     )
 
+    watcher = asyncio.create_task(_watch_kill_switch(kill_switch))
     with contextlib.suppress(TimeoutError):
         await asyncio.wait_for(stop.wait(), timeout=duration)
+    watcher.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await watcher
     try:
         await _shutdown(poller, pipeline, client, cancel_on_exit=config.risk.cancel_on_exit)
     finally:
         for signum in handlers:
             with contextlib.suppress(NotImplementedError, RuntimeError):
                 loop.remove_signal_handler(signum)
+
+
+async def _watch_kill_switch(kill_switch: KillSwitch, interval_s: float = 1.0) -> None:
+    """Poll the kill-switch trigger file so a halt does not wait for the next signal."""
+    while not kill_switch.is_tripped():
+        await asyncio.sleep(interval_s)
 
 
 async def _shutdown(

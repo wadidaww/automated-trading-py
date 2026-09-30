@@ -6,7 +6,8 @@ import pytest
 
 from trader.api.client import OrderResponse
 from trader.core.orders import ManagedOrder, OrderIntent, OrderStatus
-from trader.execution.order_manager import DuplicateOrderError, OrderManager
+from trader.execution.order_manager import DuplicateOrderError, OrderManager, TradingHaltedError
+from trader.risk.kill_switch import KillSwitch
 
 
 class RecordingClient:
@@ -86,3 +87,14 @@ def test_illegal_transition_is_refused() -> None:
     assert manager.apply_status(order, OrderStatus.FILLED)
     assert not manager.apply_status(order, OrderStatus.WORKING)
     assert order.status is OrderStatus.FILLED
+
+
+async def test_nothing_is_sent_once_the_kill_switch_trips() -> None:
+    client = RecordingClient()
+    kill_switch = KillSwitch()
+    manager = OrderManager(client, kill_switch=kill_switch)  # type: ignore[arg-type]
+    kill_switch.trip("manual")
+    with pytest.raises(TradingHaltedError):
+        await manager.place(_intent())
+    assert client.calls == []
+    assert manager.orders == {}

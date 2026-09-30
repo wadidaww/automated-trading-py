@@ -62,7 +62,8 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
     """Pre-trade risk gate.
 
     Order of checks: kill switch → actionable side → live state → lot size → tick rounding and
-    price band → sizing (Kelly, lot, max qty/notional, sellable qty) → portfolio limits →
+    price band against a fresh broker snapshot → sizing (Kelly, lot, max qty/notional, sellable
+    qty) → portfolio limits → kill switch again (it may have tripped during the broker calls) →
     order-rate throttle. The first failing check decides the reject reason. A daily-loss breach
     trips the (latched) kill switch.
     """
@@ -88,7 +89,6 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         self._clock: Clock = clock or WallClock()
         # Seeded from wall time so ids stay unique across restarts until the store persists it.
         self._seq = self._clock.now_ns() // 1_000_000
-        self._lot_sizes: dict[str, int] = {}
         self.signals_dropped = 0
         self.reject_reasons: dict[str, int] = {}
 
@@ -107,22 +107,32 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
             return self._reject(item, "invalid_price")
         try:
             state = await self._get_portfolio_state(item.symbol)
-            lot_size = await self._lot_size(item.symbol)
+            info = await self._client.get_stock_info(item.symbol)
         except Exception:
             logger.warning("risk_state_unavailable", symbol=item.symbol, exc_info=True)
             return self._reject(item, "state_unavailable")
+        lot_size = info.lot_size or 0
         if lot_size <= 0:
             return self._reject(item, "no_lot_size")
-        return self._evaluate(item, side, state, lot_size)
+        if info.price <= 0:
+            return self._reject(item, "no_reference_price")
+        return self._evaluate(item, side, state, lot_size, info.price)
 
     def _evaluate(
-        self, item: TradeSignal, side: Side, state: PortfolioState, lot_size: int
+        self,
+        item: TradeSignal,
+        side: Side,
+        state: PortfolioState,
+        lot_size: int,
+        reference_price: float,
     ) -> OrderIntent | None:
         """Price, size and gate one actionable signal against a live snapshot."""
         limit_price = round_to_tick(item.symbol, item.price, side)
         if limit_price <= 0:
             return self._reject(item, "invalid_price")
-        if abs(limit_price - item.price) / item.price > self._limits.price_band_pct:
+        # Fat-finger guard: the limit must sit near the broker's own last price, not just near
+        # the price the signal was computed from.
+        if abs(limit_price - reference_price) / reference_price > self._limits.price_band_pct:
             return self._reject(item, "price_band")
 
         qty = self._size(item, side, state, limit_price, lot_size)
@@ -147,6 +157,8 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
             self.kill_switch.trip("daily_loss_limit")
         if not decision.approved:
             return self._reject(item, decision.reason)
+        if self.kill_switch.is_tripped():
+            return self._reject(item, "kill_switch")
         if not self._throttle.try_acquire():
             return self._reject(item, "order_rate_limit")
 
@@ -159,7 +171,7 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
             limit_price=limit_price,
             strategy=self._strategy,
             created_ns=self._clock.now_ns(),
-            reference_price=item.price,
+            reference_price=reference_price,
         )
 
     def _size(
@@ -195,17 +207,6 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         self.reject_reasons[reason] = self.reject_reasons.get(reason, 0) + 1
         logger.info("signal_rejected", symbol=item.symbol, reason=reason, signal=item.signal.value)
         return None
-
-    async def _lot_size(self, symbol: str) -> int:
-        """Board lot for ``symbol`` (cached). 0 when the broker does not report one."""
-        cached = self._lot_sizes.get(symbol)
-        if cached is not None:
-            return cached
-        info = await self._client.get_stock_info(symbol)
-        lot_size = info.lot_size or 0
-        if lot_size > 0:
-            self._lot_sizes[symbol] = lot_size
-        return lot_size
 
     async def _get_portfolio_state(self, symbol: str) -> PortfolioState:
         """Fetch live portfolio, positions and working orders from the broker.

@@ -220,7 +220,7 @@ class DefaultPipelineFactory(IPipelineFactory):
     def create_execution_stage(self) -> ExecutionStage:
         """Create ExecutionStage with shared client."""
         logger.info("creating_execution_stage")
-        return ExecutionStage(OrderManager(self._client))
+        return ExecutionStage(OrderManager(self._client, kill_switch=self.kill_switch))
 
     def create_audit_stage(self) -> AuditStage:
         """Create AuditStage."""
