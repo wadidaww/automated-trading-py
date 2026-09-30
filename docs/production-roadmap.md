@@ -31,7 +31,7 @@ So co-located, queue-position HFT is not possible on this venue. The realistic t
 | Research | Backtester returns a **hardcoded equity curve** when it gets no trades (`evaluation/backtester.py:9,27`), and `scripts/run_backtest.py` always passes none. Trainer returns literal metrics (`model/trainer.py:32-34`). No data loader (`trader.data.fetcher` is missing). Notebooks are empty. |
 | Models | Volatility scaling mixes units, so thresholds collapse to about ±0.01 (`data_stage.py:113`, `mean_reversion.py:197`). `bb_position` duplicates the z-score. Train/serve feature skew (`data/normalizer.py` vs `DataStage`). The unfitted GradientBoosting model raises on every tick. The ensemble returns BUY on all-zero votes. |
 | Costs | No stamp duty, levies, commission, platform fee, spread or slippage modelled anywhere. |
-| Build/CI | `pyproject.toml` requires Python ^3.12 (PEP 695 generics in `api/typesafe/payload.py:9`), but the Dockerfile and all workflows use **3.11**. Nothing imports there, and `mypy src` fails to parse. `mypy.ini` overrides pyproject and is **not strict**. Under 3.12, two pipeline tests fail and coverage is 63%, below the 64% gate. `paper-trade.yml`, `backtest.yml` and `model-train.yml` would fail. |
+| Build/CI | Fixed: the Dockerfile, `ci.yml`, `backtest.yml` and `model-train.yml` now use Python 3.12 (required by the PEP 695 generics in `api/typesafe/payload.py:9`). Under 3.12 with the locked deps, lint, format, `mypy src` and all unit/integration tests pass with 85% coverage. Still open: `mypy.ini` overrides pyproject and is **not strict**; `paper-trade.yml` has no setup-python or dependency install step, and `model-train.yml` still fails at `scripts/fetch_historical_data.py`. |
 | Ops | Prometheus metrics are defined but `start_http_server` is never called. Logs are not JSON in prod (`__debug__` check). No persistence (`aiosqlite` is an unused dependency). No reconciliation. No SIGTERM handling. |
 
 ## Target architecture
@@ -52,7 +52,7 @@ Backtest: same features/model/risk, replayed events + simulated fill/cost model 
 
 ## Phased plan
 
-### Phase 0: stop the bleeding (blocks any paper or live use)
+1. ~~Fix Python 3.12 in the Dockerfile and every workflow; fix the two failing pipeline tests and restore coverage above 64%.~~ Done (tests pass under 3.12, coverage 85%). Remaining: enable `strict = true` in `mypy.ini`.
 1. Fix Python 3.12 in the Dockerfile and every workflow. Enable `strict = true` in `mypy.ini`. Fix the two failing pipeline tests and restore coverage above 64%.
 2. Live-mode guard:
    - no simulator fallback in live
