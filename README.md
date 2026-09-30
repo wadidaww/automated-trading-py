@@ -16,7 +16,7 @@ flowchart LR
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Poetry
 - Futu OpenD gateway
 - Futu paper trading account
@@ -39,8 +39,8 @@ docker compose up --build
 ### 3. Local development
 
 ```bash
-conda activate futunn  # or your Python 3.11+ environment
-pip install -e ".[dev]"
+conda activate futunn  # or your Python 3.12+ environment
+poetry install --with dev
 ```
 
 ## Configuration
@@ -101,5 +101,12 @@ Trading involves substantial risk of loss. Use paper trading and staged deployme
 ruff check src/ tests/
 ruff format --check .
 mypy src
-pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail-under=64
+PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail-under=64
 ```
+
+## Documentation
+
+- `docs/architecture.md` — pipeline stages, factory, models, risk gates, data flow
+- `docs/api-reference.md` — public classes, methods, and typed payloads
+- `docs/runbook.md` — operations, health checks, troubleshooting
+- `AGENTS.md` — contributor/agent commands and repo conventions

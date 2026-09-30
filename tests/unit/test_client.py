@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from futu import TrdSide
+from futu.common.constant import ContextStatus
 
 from trader.api import client as client_module
 from trader.api.client import FutuClient
@@ -45,3 +46,48 @@ async def test_paper_fallback_simulates_varying_prices() -> None:
             prices.append(stock.price)
     assert len(prices) == 50
     assert len(set(prices)) > 1, "paper fallback should produce varying prices"
+
+
+@pytest.mark.asyncio
+async def test_verify_handshake_reports_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _ReadyContext:
+        status = ContextStatus.READY
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(client_module, "OpenQuoteContext", lambda *args, **kwargs: _ReadyContext())
+    client = FutuClient()
+    assert await client.verify_handshake(timeout_s=0.5) is True
+
+
+@pytest.mark.asyncio
+async def test_verify_handshake_times_out_and_closes_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _PendingContext:
+        status = ContextStatus.CONNECTING
+
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    context = _PendingContext()
+    monkeypatch.setattr(client_module, "OpenQuoteContext", lambda *args, **kwargs: context)
+    client = FutuClient()
+    assert await client.verify_handshake(timeout_s=0.1) is False
+    assert context.closed is True
+
+
+@pytest.mark.asyncio
+async def test_verify_handshake_reports_construction_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _broken_context(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("cannot build context")
+
+    monkeypatch.setattr(client_module, "OpenQuoteContext", _broken_context)
+    client = FutuClient()
+    assert await client.verify_handshake(timeout_s=0.1) is False
