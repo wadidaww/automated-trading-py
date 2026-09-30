@@ -10,7 +10,7 @@ data/raw/*
 data/processed/*
 !data/models/.gitkeep
 logs/
-futu-opend
+/futu-opend
 src/samples
 .vscode
 .env
