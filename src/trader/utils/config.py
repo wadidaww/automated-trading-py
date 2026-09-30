@@ -6,9 +6,17 @@ import os
 from pathlib import Path
 from typing import Any
 
+from datetime import date
+from typing import Literal
+
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from trader.core.symbols import normalize_symbol
+
+# Futu documents ~15 place_order calls per 30 s per account; stay strictly below it.
+FUTU_MAX_ORDERS_PER_30S = 15
 
 
 class OpendConfig(BaseModel):
@@ -20,6 +28,8 @@ class OpendConfig(BaseModel):
     reconnect_max_attempts: int = 5
     rate_limit_requests: int = 300
     rate_limit_window_s: int = 30
+    # Name of the env var holding the MD5 of the trade password (REAL only). Never the value.
+    unlock_password_md5_env: str = "FUTU_TRADE_PWD_MD5"  # noqa: S105 - env var name
 
 
 class TradingSettings(BaseModel):
@@ -27,6 +37,8 @@ class TradingSettings(BaseModel):
 
     account_id: str = Field(...)
     market: str = "HK"
+    # SIMULATE or REAL. REAL additionally requires --mode live and TRADER_LIVE_CONFIRM=1.
+    trd_env: Literal["SIMULATE", "REAL"] = "SIMULATE"
     symbols: list[str]
     max_position_notional_hkd: int
     max_portfolio_notional_hkd: int
@@ -35,6 +47,60 @@ class TradingSettings(BaseModel):
     concentration_limit_pct: float
     signal_cooldown_s: int
     order_type: str = "LIMIT"
+    strategy_name: str = "default"
+
+    @field_validator("symbols")
+    @classmethod
+    def _normalize_symbols(cls, value: list[str]) -> list[str]:
+        """Normalise every code to Futu ``MARKET.CODE`` form (``700.HK`` → ``HK.00700``)."""
+        return [normalize_symbol(symbol) for symbol in value]
+
+
+class RiskSettings(BaseModel):
+    """Pre-trade and loss limits. Money values are in account currency major units."""
+
+    max_order_qty: int = 10_000
+    max_order_notional: float = 50_000.0
+    max_position_notional: float = 100_000.0
+    max_gross_notional: float = 500_000.0
+    max_daily_loss: float = 10_000.0
+    max_open_orders: int = 10
+    concentration_limit_pct: float = 0.25
+    max_orders_per_second: int = 2
+    max_orders_per_30s: int = 12
+    price_band_pct: float = 0.02
+    max_quote_age_ms: int = 3_000
+    allow_short: bool = False
+    kill_switch_file: str = "run/KILL"
+    cancel_on_exit: bool = True
+    # Kelly fraction multiplier applied on top of the model's edge estimate (fractional Kelly).
+    kelly_fraction: float = 0.25
+
+    @model_validator(mode="after")
+    def _check_limits(self) -> RiskSettings:
+        """Reject configs that would exceed the broker's documented order-rate limit."""
+        if self.max_orders_per_30s >= FUTU_MAX_ORDERS_PER_30S:
+            raise ValueError(f"max_orders_per_30s must be < {FUTU_MAX_ORDERS_PER_30S}")
+        if not 0.0 < self.price_band_pct < 0.2:
+            raise ValueError("price_band_pct must be in (0, 0.2)")
+        if not 0.0 < self.kelly_fraction <= 1.0:
+            raise ValueError("kelly_fraction must be in (0, 1]")
+        return self
+
+
+class StorageSettings(BaseModel):
+    """Durable state (orders, fills, audit) and market-data locations."""
+
+    sqlite_path: str = "data/state/trader.db"
+    parquet_dir: str = "data/raw"
+
+
+class SessionSettings(BaseModel):
+    """Exchange calendar overrides (HKT dates)."""
+
+    holidays: list[date] = Field(default_factory=list)
+    half_days: list[date] = Field(default_factory=list)
+    reconcile_interval_s: int = 60
 
 
 class ModelSettings(BaseModel):
@@ -78,6 +144,9 @@ class AppConfig(BaseSettings):
     pipeline: PipelineSettings
     logging: LoggingSettings
     metrics: MetricsSettings
+    risk: RiskSettings = Field(default_factory=RiskSettings)
+    storage: StorageSettings = Field(default_factory=StorageSettings)
+    session: SessionSettings = Field(default_factory=SessionSettings)
     model_config = SettingsConfigDict(env_file=".env")
 
 
