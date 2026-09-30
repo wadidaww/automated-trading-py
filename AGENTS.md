@@ -20,7 +20,7 @@ PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-report
 
 - The repo is Poetry-based (`pyproject.toml`, `poetry.lock`), but **Poetry is not installed** in the dev env and the root `.venv/` only contains `futu-api` (no pytest/ruff/mypy). Run the tools directly from the active conda env (`futu-api` itself is installed via `conda pypi install futu-api`, per README).
 - futu-api ships no type stubs: `ignore_missing_imports = true`. `pyproject.toml` sets `strict = true`, but `mypy.ini` takes precedence and is **not** strict.
-- The code requires **Python ≥3.12** (PEP 695 generics, e.g. `api/typesafe/payload.py:9`); the Dockerfile and workflows still pin 3.11, where nothing imports and `mypy src` fails to parse.
+- The code requires **Python ≥3.12** (PEP 695 generics, e.g. `api/typesafe/payload.py:9`). CI, `model-train.yml`, `backtest.yml` and the Dockerfile all use 3.12; `paper-trade.yml` has no setup-python or install step and relies on the runner default.
 - Ruff config is duplicated in `.ruff.toml` and `pyproject.toml` (line-length 100, same lint select/ignore). Keep them in sync when editing one.
 
 ## Config
