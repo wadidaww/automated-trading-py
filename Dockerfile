@@ -1,12 +1,12 @@
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 WORKDIR /app
 RUN pip install --no-cache-dir poetry
 COPY pyproject.toml poetry.lock ./
 RUN poetry export -f requirements.txt --without-hashes | pip install --no-cache-dir --no-deps -r /dev/stdin
 
-FROM python:3.11-slim AS runtime
+FROM python:3.12-slim AS runtime
 WORKDIR /app
-COPY --from=builder /usr/local/lib/python3.11 /usr/local/lib/python3.11
+COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY src/ ./src/
 COPY config/ ./config/
 COPY data/models/ ./data/models/
