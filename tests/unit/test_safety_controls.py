@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from trader.__main__ import LiveModeRefusedError, check_live_opt_in
+from trader.runtime import LiveModeRefusedError, check_live_opt_in
 from trader.risk.kill_switch import KillSwitch
 from trader.risk.throttle import OrderRateThrottle
 from trader.utils.config import RiskSettings, load_config

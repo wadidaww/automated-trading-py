@@ -32,6 +32,7 @@ PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-report
 
 ## Repo structure notes
 
+- Module layout: `__main__.py` is argparse only; `runtime.py` holds the live opt-in gate (`check_live_opt_in`), `build_client`, signal handling and shutdown; `health.py` holds `--health-check`. `api/client.py` is the connection and call layer only: typed responses in `api/models.py`, payload→response mapping in `api/parsers.py`, paper-mode behaviour in `api/simulator.py` (`PaperSimulator`), rate limiting in `api/rate_limit.py`. Pure indicators live in `data/indicators.py` (shared by `DataStage`; reuse them for backtest/training to avoid feature skew). `client.py` re-exports the response models for compatibility.
 - Pipeline stages are wired through an Abstract Factory (`src/trader/pipeline/factory.py`) against `IStage` (`src/trader/pipeline/base.py`); add new stages there, not by hand-wiring `pipeline.py`.
 - Model selection is a registry (`DefaultPipelineFactory._model_builders`, keyed by `model.type` in config): `ensemble`, `gradient_boosting` (lazy import, falls back to `mean_reversion` when sklearn is missing), default `mean_reversion`. `transformer_model` and `lstm_model` exist in `src/trader/model/` but are not wired (`lstm_model` has no `predict()` and does not implement `ISignalModel`).
 - `docs/architecture.md`, `docs/runbook.md`, and `docs/api-reference.md` contain overview docs — prefer reading the code for implementation details.

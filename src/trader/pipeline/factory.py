@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from trader.api.client import FutuClient
 from trader.execution.order_manager import OrderManager
@@ -26,6 +26,21 @@ from trader.utils.logger import get_logger
 from trader.utils.maths import to_minor_units
 
 logger = get_logger("factory")
+
+DEFAULT_WINDOW_SIZE = 100
+DEFAULT_CONFIDENCE_THRESHOLD = 0.65
+DEFAULT_MODEL_TYPE = "mean_reversion"
+DEFAULT_STRATEGY = "default"
+# (name, weight, MeanReversionModel kwargs) for the "ensemble" model type.
+ENSEMBLE_MEMBERS: tuple[tuple[str, float, dict[str, Any]], ...] = (
+    ("standard", 0.4, {"buy_threshold": -2.0, "sell_threshold": 2.0}),
+    ("aggressive", 0.3, {"buy_threshold": -1.5, "sell_threshold": 1.5}),
+    (
+        "conservative",
+        0.3,
+        {"buy_threshold": -2.5, "sell_threshold": 2.5, "volatility_adjust": True},
+    ),
+)
 
 
 class RiskEngineKwargs(TypedDict):
@@ -88,9 +103,9 @@ class DefaultPipelineFactory(IPipelineFactory):
 
     def create_data_stage(self) -> DataStage:
         """Create DataStage with configured window size."""
-        window_size = 100
-        if self._config is not None:
-            window_size = self._config.pipeline.data_window_size
+        window_size = (
+            self._config.pipeline.data_window_size if self._config else DEFAULT_WINDOW_SIZE
+        )
         logger.info("creating_data_stage", window_size=window_size)
         return DataStage(window_size=window_size)
 
@@ -101,11 +116,9 @@ class DefaultPipelineFactory(IPipelineFactory):
         - "mean_reversion": Enhanced mean reversion with momentum confirmation
         - "ensemble": Weighted ensemble of mean reversion models
         """
-        threshold = 0.65
-        model_type = "mean_reversion"
-        if self._config is not None:
-            threshold = self._config.model.confidence_threshold
-            model_type = self._config.model.type
+        model_cfg = self._config.model if self._config else None
+        threshold = model_cfg.confidence_threshold if model_cfg else DEFAULT_CONFIDENCE_THRESHOLD
+        model_type = model_cfg.type if model_cfg else DEFAULT_MODEL_TYPE
 
         model = self._create_model(model_type)
         logger.info(
@@ -137,23 +150,10 @@ class DefaultPipelineFactory(IPipelineFactory):
             return MeanReversionModel()
 
     def _create_ensemble_model(self) -> EnsembleSignalModel:
-        """Create ensemble model with multiple mean reversion variants."""
+        """Create the weighted ensemble of mean reversion variants in ``ENSEMBLE_MEMBERS``."""
         ensemble = EnsembleSignalModel()
-        ensemble.add_model(
-            MeanReversionModel(buy_threshold=-2.0, sell_threshold=2.0),
-            weight=0.4,
-            name="standard",
-        )
-        ensemble.add_model(
-            MeanReversionModel(buy_threshold=-1.5, sell_threshold=1.5),
-            weight=0.3,
-            name="aggressive",
-        )
-        ensemble.add_model(
-            MeanReversionModel(buy_threshold=-2.5, sell_threshold=2.5, volatility_adjust=True),
-            weight=0.3,
-            name="conservative",
-        )
+        for name, weight, params in ENSEMBLE_MEMBERS:
+            ensemble.add_model(MeanReversionModel(**params), weight=weight, name=name)
         return ensemble
 
     def create_risk_stage(self) -> RiskStage:
@@ -167,7 +167,7 @@ class DefaultPipelineFactory(IPipelineFactory):
             allow_short=risk.allow_short,
         )
         throttle = OrderRateThrottle(risk.max_orders_per_second, risk.max_orders_per_30s)
-        strategy = self._config.trading.strategy_name if self._config is not None else "default"
+        strategy = self._config.trading.strategy_name if self._config else DEFAULT_STRATEGY
         logger.info("creating_risk_stage", strategy=strategy)
         return RiskStage(
             engine,

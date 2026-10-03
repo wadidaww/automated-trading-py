@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from structlog.testing import capture_logs
 
-import trader.__main__ as cli
+import trader.health as cli
 from trader.api.client import FutuClient
 from trader.utils.config import AppConfig
 
