@@ -1,3 +1,6 @@
+# Crypto (Futu OpenD, CC.* pairs). Limits are USD.
+# Crypto has no Futu SIMULATE: --mode paper runs on the local simulator (trading.crypto.paper_*).
+# --mode live needs trd_env: REAL, TRADER_LIVE_CONFIRM=1, FUTU_SECURITY_FIRM and futu-api >= 10.5.6508.
 opend:
   host: "127.0.0.1"
   port: 11111
@@ -7,23 +10,30 @@ opend:
   rate_limit_window_s: 30
 trading:
   account_id: "${FUTU_ACCOUNT_ID}"
-  market: "CC"  # market: "HK"
+  market: "CC"
   trd_env: "SIMULATE"  # REAL also needs --mode live and TRADER_LIVE_CONFIRM=1
-  symbols: ["CC.ETHUSD"]  # symbols: ["HK.00700"]
+  symbols: ["CC.ETHUSD"]
   order_type: "LIMIT"
-  max_position_notional_hkd: 75000
-  max_portfolio_notional_hkd: 750000
-  max_daily_loss_hkd: 15000
-  max_open_orders: 15
+  max_position_notional: 5000
+  max_portfolio_notional: 50000
+  max_daily_loss: 1000
+  max_open_orders: 5
   concentration_limit_pct: 0.25
   signal_cooldown_s: 45
+  crypto:
+    security_firm: "${FUTU_SECURITY_FIRM}"  # FUTUSECURITIES | FUTUINC | FUTUSG (REAL only)
+    qty_step: 0.0001  # must match the precision the account accepts for the pair
+    min_qty: 0.0001
+    paper_base_price: 2000.0
+    paper_price_tick: 0.01
+    paper_cash: 100000.0
 risk:
-  max_order_qty: 2000
-  max_order_notional: 50000
+  max_order_qty: 1.0
+  max_order_notional: 2000
   max_orders_per_second: 2
   max_orders_per_30s: 12  # Futu allows ~15 place_order per 30 s
   price_band_pct: 0.02
-  allow_short: false
+  allow_short: false  # crypto is spot only
   kill_switch_file: "run/KILL"
   cancel_on_exit: true
 model:

@@ -6,13 +6,21 @@ there are no default sizes and no default portfolio values.
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Final
 
-from trader.api.client import FutuClient, find_position_by_symbol
+from trader.api.broker import BrokerClient
+from trader.api.client import find_position_by_symbol
+from trader.api.models import StockInfoResponse
 from trader.core.clock import Clock, WallClock
-from trader.core.market_rules import round_down_to_lot, round_to_tick
+from trader.core.market_rules import (
+    round_down_to_lot,
+    round_down_to_step,
+    round_to_tick,
+    rules_for,
+)
 from trader.core.orders import OrderIntent, Side, from_futu_status, make_client_order_id
 from trader.model.base import Signal
 from trader.pipeline.base import IStage
@@ -22,7 +30,7 @@ from trader.risk.kill_switch import KillSwitch
 from trader.risk.risk_engine import RiskEngine, RiskInput
 from trader.risk.throttle import OrderRateThrottle
 from trader.utils.logger import get_logger
-from trader.utils.maths import to_minor_units
+from trader.utils.maths import to_minor_units, to_minor_units_ceil
 
 logger = get_logger("risk_stage")
 
@@ -40,10 +48,19 @@ _ORDER_SIDES: Final[dict[Signal, Side]] = {Signal.BUY: "BUY", Signal.SELL: "SELL
 class PreTradeLimits:
     """Per-order limits applied before the portfolio-level risk engine."""
 
-    max_order_qty: int
+    max_order_qty: float
     max_order_notional_minor: int
     price_band_pct: float
     allow_short: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Instrument:
+    """Order-validity rules for one symbol: quantity step (lot), minimum and tick."""
+
+    step: float
+    min_qty: float
+    tick: float | None  # None → the market's static tick ladder
 
 
 @dataclass(slots=True)
@@ -55,7 +72,7 @@ class PortfolioState:
     current_positions_notional_minor: int
     daily_pnl_minor: int
     open_orders: int
-    can_sell_qty: int
+    can_sell_qty: float
 
 
 class RiskStage(IStage[TradeSignal, OrderIntent | None]):
@@ -71,7 +88,7 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
     def __init__(
         self,
         engine: RiskEngine,
-        client: FutuClient,
+        client: BrokerClient,
         limits: PreTradeLimits,
         kill_switch: KillSwitch,
         throttle: OrderRateThrottle,
@@ -111,23 +128,42 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         except Exception:
             logger.warning("risk_state_unavailable", symbol=item.symbol, exc_info=True)
             return self._reject(item, "state_unavailable")
-        lot_size = info.lot_size or 0
-        if lot_size <= 0:
-            return self._reject(item, "no_lot_size")
+        instrument = self._instrument(item.symbol, info)
+        if isinstance(instrument, str):
+            return self._reject(item, instrument)
         if info.price <= 0:
             return self._reject(item, "no_reference_price")
-        return self._evaluate(item, side, state, lot_size, info.price)
+        return self._evaluate(item, side, state, instrument, info.price)
+
+    @staticmethod
+    def _instrument(symbol: str, info: StockInfoResponse) -> Instrument | str:
+        """Quantity and tick rules for ``symbol``, or the reject reason when the data is missing.
+
+        Equities need a positive board lot. Crypto has no lots: it needs a quantity step and a
+        broker-supplied tick, and rejects rather than guessing either.
+        """
+        if rules_for(symbol).fractional_qty:
+            if not info.qty_step or info.qty_step <= 0:
+                return "no_qty_step"
+            if not info.tick_size or info.tick_size <= 0:
+                return "no_tick_size"
+            return Instrument(
+                step=info.qty_step, min_qty=info.min_qty or info.qty_step, tick=info.tick_size
+            )
+        if not info.lot_size or info.lot_size <= 0:
+            return "no_lot_size"
+        return Instrument(step=float(info.lot_size), min_qty=float(info.lot_size), tick=None)
 
     def _evaluate(
         self,
         item: TradeSignal,
         side: Side,
         state: PortfolioState,
-        lot_size: int,
+        instrument: Instrument,
         reference_price: float,
     ) -> OrderIntent | None:
         """Price, size and gate one actionable signal against a live snapshot."""
-        limit_price = round_to_tick(item.symbol, item.price, side)
+        limit_price = round_to_tick(item.symbol, item.price, side, instrument.tick)
         if limit_price <= 0:
             return self._reject(item, "invalid_price")
         # Fat-finger guard: the limit must sit near the broker's own last price, not just near
@@ -135,8 +171,8 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         if abs(limit_price - reference_price) / reference_price > self._limits.price_band_pct:
             return self._reject(item, "price_band")
 
-        qty = self._size(item, side, state, limit_price, lot_size)
-        if qty <= 0:
+        qty = self._size(item, side, state, limit_price, instrument)
+        if qty < instrument.min_qty or qty <= 0:
             return self._reject(item, "size_zero")
 
         reduces_position = side == "SELL" and not self._limits.allow_short
@@ -144,7 +180,7 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
             RiskInput(
                 symbol=item.symbol,
                 quantity=qty,
-                price_minor=to_minor_units(limit_price),
+                price_minor=to_minor_units_ceil(limit_price),
                 current_symbol_notional_minor=state.symbol_notional_minor,
                 current_portfolio_notional_minor=state.current_positions_notional_minor,
                 daily_pnl_minor=state.daily_pnl_minor,
@@ -180,10 +216,13 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         side: Side,
         state: PortfolioState,
         limit_price: float,
-        lot_size: int,
-    ) -> int:
-        """Whole-lot quantity after Kelly sizing and every per-order cap. 0 means do not trade."""
-        price_minor = to_minor_units(limit_price)
+        instrument: Instrument,
+    ) -> float:
+        """Quantity after Kelly sizing and every per-order cap, on the instrument's lot/step.
+
+        0 means do not trade. Equities size in whole lots; crypto in decimal steps.
+        """
+        price_minor = to_minor_units_ceil(limit_price)
         if price_minor <= 0 or item.confidence <= 0 or state.portfolio_value_minor <= 0:
             return 0
         kelly_fraction = self._kelly_fraction(item.confidence)
@@ -192,14 +231,24 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         budget = int(
             state.portfolio_value_minor * kelly_fraction * self._size_multiplier(item.confidence)
         )
-        qty = min(
-            budget // price_minor,
-            self._limits.max_order_qty,
-            self._limits.max_order_notional_minor // price_minor,
-        )
+        fractional = rules_for(item.symbol).fractional_qty
+        if fractional:
+            qty = min(
+                budget / price_minor,
+                self._limits.max_order_qty,
+                self._limits.max_order_notional_minor / price_minor,
+            )
+        else:
+            qty = min(
+                budget // price_minor,
+                self._limits.max_order_qty,
+                self._limits.max_order_notional_minor // price_minor,
+            )
         if side == "SELL" and not self._limits.allow_short:
             qty = min(qty, state.can_sell_qty)
-        return round_down_to_lot(qty, lot_size)
+        if fractional:
+            return round_down_to_step(qty, instrument.step)
+        return float(round_down_to_lot(qty, int(instrument.step)))
 
     def _reject(self, item: TradeSignal, reason: str) -> OrderIntent | None:
         """Count and log a rejected signal. Always returns None (the rejection)."""
@@ -223,7 +272,7 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         for o in working:
             if o.order_side == "BUY" and o.price is not None:
                 remaining = max(o.qty - o.dealt_qty, 0)
-                working_buy_minor[o.symbol] += remaining * to_minor_units(o.price)
+                working_buy_minor[o.symbol] += math.ceil(remaining * to_minor_units_ceil(o.price))
 
         symbol_pos = find_position_by_symbol(positions, symbol)
         daily_pnl = (portfolio.realized_pnl or 0.0) + (portfolio.unrealized_pnl or 0.0)

@@ -7,7 +7,7 @@ from contextlib import suppress
 
 from prometheus_client import Counter, Gauge
 
-from trader.api.client import FutuClient
+from trader.api.broker import BrokerClient
 from trader.api.quote_handler import QuoteEvent
 from trader.pipeline.factory import DefaultPipelineFactory, IPipelineFactory
 from trader.utils.config import AppConfig
@@ -33,7 +33,7 @@ class TradingPipeline:
         self,
         factory: IPipelineFactory | None = None,
         config: AppConfig | None = None,
-        client: FutuClient | None = None,
+        client: BrokerClient | None = None,
         queue_maxsize: int = 1000,
     ) -> None:
         self.input_queue: asyncio.Queue[QuoteEvent] = asyncio.Queue(maxsize=queue_maxsize)

@@ -7,12 +7,13 @@ alignment is exact and free of float drift.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from datetime import UTC, date, datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Final
 
 from trader.core.orders import Side
-from trader.core.symbols import market_of
+from trader.core.symbols import CRYPTO_MARKET, market_of
 
 _MILLI: Final[int] = 1000
 # Rounding works on micro-units: finer than every tick in every supported market.
@@ -38,12 +39,49 @@ def _to_milli(price: float) -> int:
     return round(price * _MILLI)
 
 
-def tick_size(symbol: str, price: float) -> float:
+@dataclass(frozen=True, slots=True)
+class MarketRules:
+    """Per-market order conventions the risk stage branches on.
+
+    Attributes:
+        fractional_qty: Quantities are decimal amounts on a step (crypto), not whole board lots.
+        broker_tick: The tick has no static ladder and must come from the broker's instrument
+            data; without it the order is rejected rather than guessed.
+    """
+
+    fractional_qty: bool = False
+    broker_tick: bool = False
+
+
+_DEFAULT_RULES: Final[MarketRules] = MarketRules()
+MARKET_RULES: Final[dict[str, MarketRules]] = {
+    CRYPTO_MARKET: MarketRules(fractional_qty=True, broker_tick=True),
+}
+
+
+def rules_for(symbol: str) -> MarketRules:
+    """Order conventions for the market of ``symbol`` (equity defaults for unlisted markets)."""
+    return MARKET_RULES.get(market_of(symbol), _DEFAULT_RULES)
+
+
+def tick_size(symbol: str, price: float, tick: float | None = None) -> float:
     """Minimum price increment for ``symbol`` at ``price``.
 
     HK uses the HKEX spread table; US uses 0.01 at or above $1 and 0.0001 below; other markets
-    default to 0.01.
+    default to 0.01. Markets whose tick is broker-defined (crypto) use the explicit ``tick``.
+
+    Args:
+        symbol: Futu code.
+        price: Reference price.
+        tick: Broker-supplied tick; required for markets with ``broker_tick`` rules.
+
+    Raises:
+        ValueError: When the market needs a broker tick and none (or a non-positive one) is given.
     """
+    if tick is not None and tick > 0:
+        return tick
+    if rules_for(symbol).broker_tick:
+        raise ValueError(f"{symbol} needs a broker-supplied tick size")
     market = market_of(symbol)
     if market == "HK":
         milli = _to_milli(price)
@@ -56,28 +94,45 @@ def tick_size(symbol: str, price: float) -> float:
     return 0.01
 
 
-def round_to_tick(symbol: str, price: float, side: Side) -> float:
+def round_to_tick(symbol: str, price: float, side: Side, tick: float | None = None) -> float:
     """Round a limit price onto the tick ladder, *passively* (BUY down, SELL up).
 
-    Passive rounding never makes an order more aggressive than the strategy intended.
+    Passive rounding never makes an order more aggressive than the strategy intended. Crypto
+    ticks are finer than a micro-unit grid can hold exactly, so that path uses ``Decimal``.
     """
-    tick = tick_size(symbol, price)
+    step = tick_size(symbol, price, tick)
+    if rules_for(symbol).fractional_qty:
+        return _round_decimal(price, step, ROUND_FLOOR if side == "BUY" else ROUND_CEILING)
     p = round(price * _MICRO)
-    t = round(tick * _MICRO)
+    t = round(step * _MICRO)
     steps = p // t if side == "BUY" else -((-p) // t)
     return steps * t / _MICRO
 
 
-def is_on_tick(symbol: str, price: float) -> bool:
+def _round_decimal(value: float, step: float, rounding: str) -> float:
+    """Round ``value`` to a multiple of ``step`` in exact decimal arithmetic."""
+    quantum = Decimal(str(step))
+    steps = (Decimal(str(value)) / quantum).to_integral_value(rounding=rounding)
+    return float(steps * quantum)
+
+
+def is_on_tick(symbol: str, price: float, tick: float | None = None) -> bool:
     """Whether ``price`` lies exactly on the tick ladder."""
-    return round_to_tick(symbol, price, "BUY") == round_to_tick(symbol, price, "SELL")
+    return round_to_tick(symbol, price, "BUY", tick) == round_to_tick(symbol, price, "SELL", tick)
 
 
-def round_down_to_lot(qty: int, lot_size: int) -> int:
+def round_down_to_lot(qty: float, lot_size: int) -> int:
     """Largest whole-lot quantity ≤ ``qty``. Returns 0 when ``lot_size`` is not positive."""
     if lot_size <= 0 or qty <= 0:
         return 0
-    return (qty // lot_size) * lot_size
+    return (int(qty) // lot_size) * lot_size
+
+
+def round_down_to_step(qty: float, step: float) -> float:
+    """Largest multiple of ``step`` ≤ ``qty`` (crypto). Returns 0 when ``step`` is not positive."""
+    if step <= 0 or qty <= 0:
+        return 0.0
+    return _round_decimal(qty, step, ROUND_FLOOR)
 
 
 class SessionPhase(Enum):
@@ -91,6 +146,20 @@ class SessionPhase(Enum):
 
 
 HKT: Final[timezone] = timezone(timedelta(hours=8), "HKT")
+
+
+@dataclass(slots=True)
+class CryptoSessionCalendar:
+    """Crypto trades around the clock: every instant is a continuous session."""
+
+    def phase(self, ts_ns: int) -> SessionPhase:
+        """Always ``CONTINUOUS``; ``ts_ns`` is accepted for calendar-interface parity."""
+        del ts_ns
+        return SessionPhase.CONTINUOUS
+
+    def is_continuous(self, ts_ns: int) -> bool:
+        """Always True."""
+        return self.phase(ts_ns) is SessionPhase.CONTINUOUS
 
 
 @dataclass(slots=True)

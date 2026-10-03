@@ -99,3 +99,14 @@ class FakeTradeContext:
 
     def close(self) -> None:
         self.closed = True
+
+
+class FakeCryptoTradeContext(FakeTradeContext):
+    """Stand-in for ``futu.OpenCryptoTradeContext``: records the constructor arguments."""
+
+    instances: list[FakeCryptoTradeContext] = []  # noqa: RUF012 - shared test registry
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__()
+        self.init_kwargs = kwargs
+        FakeCryptoTradeContext.instances.append(self)

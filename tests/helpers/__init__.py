@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .fakes import FakeQuoteContext, FakeTradeContext
+from .fakes import FakeCryptoTradeContext, FakeQuoteContext, FakeTradeContext
 from .features import model_features
 from .pipeline import run_pipeline
 from .responses import (
@@ -13,6 +13,7 @@ from .responses import (
 )
 
 __all__ = [
+    "FakeCryptoTradeContext",
     "FakeQuoteContext",
     "FakeTradeContext",
     "make_order",

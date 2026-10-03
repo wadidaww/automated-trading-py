@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
+from trader.api.broker import BrokerClient
 from trader.api.client import (
-    FutuClient,
     OrderResponse,
     PortfolioConditionResponse,
     PositionResponse,
@@ -22,7 +22,7 @@ class TargetEvaluation:
     current_price: float
     buy_target: float | None
     sell_target: float | None
-    held_quantity: int
+    held_quantity: float
     buy_target_hit: bool
     sell_target_hit: bool
 
@@ -30,7 +30,7 @@ class TargetEvaluation:
 class TradingService:
     """Coordinate stock inspection, target checks, orders, and portfolio sync."""
 
-    def __init__(self, client: FutuClient) -> None:
+    def __init__(self, client: BrokerClient) -> None:
         self.client = client
 
     async def gather_stock_info(self, symbol: str) -> StockInfoResponse:
@@ -59,7 +59,7 @@ class TradingService:
         )
 
     async def place_buy_order(
-        self, symbol: str, qty: int, buy_target: float, order_type: str = "LIMIT"
+        self, symbol: str, qty: float, buy_target: float, order_type: str = "LIMIT"
     ) -> OrderResponse:
         """Place a buy order only after the buy target is reached."""
         evaluation = await self.evaluate_targets(symbol, buy_target=buy_target)
@@ -74,7 +74,7 @@ class TradingService:
         )
 
     async def place_sell_order(
-        self, symbol: str, qty: int, sell_target: float, order_type: str = "LIMIT"
+        self, symbol: str, qty: float, sell_target: float, order_type: str = "LIMIT"
     ) -> OrderResponse:
         """Place a sell order only after the sell target is reached and shares are held."""
         evaluation = await self.evaluate_targets(symbol, sell_target=sell_target)
@@ -111,9 +111,9 @@ class TradingService:
         return target if order_type == "LIMIT" else None
 
     @staticmethod
-    def _held_quantity(symbol: str, positions: list[PositionResponse]) -> int:
+    def _held_quantity(symbol: str, positions: list[PositionResponse]) -> float:
         """Get the held quantity for one symbol."""
         return next(
             (position.quantity for position in positions if position.symbol == symbol),
-            0,
+            0.0,
         )

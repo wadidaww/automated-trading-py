@@ -18,7 +18,7 @@ class QuoteTick:
 
     symbol: str
     last: float
-    volume: int
+    volume: float
     turnover: float
     exch_ts_ns: int
     recv_ts_ns: int
@@ -29,7 +29,7 @@ class BookLevel:
     """One price level of the order book."""
 
     price: float
-    qty: int
+    qty: float
     orders: int = 0
 
 
@@ -67,7 +67,7 @@ class TradeTick:
 
     symbol: str
     price: float
-    qty: int
+    qty: float
     aggressor: Side | None
     exch_ts_ns: int
     recv_ts_ns: int
@@ -82,7 +82,7 @@ class Bar:
     high: float
     low: float
     close: float
-    volume: int
+    volume: float
     turnover: float
     ts_ns: int
 

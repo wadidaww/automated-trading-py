@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from decimal import ROUND_CEILING, Decimal
 
 # 1 unit of currency = 100 minor units (cents)
 _MINOR_UNITS_FACTOR = 100
@@ -11,6 +12,15 @@ _MINOR_UNITS_FACTOR = 100
 def to_minor_units(amount: float) -> int:
     """Convert a currency amount in major units (e.g. HKD) to minor units (cents)."""
     return int(amount * _MINOR_UNITS_FACTOR)
+
+
+def to_minor_units_ceil(amount: float) -> int:
+    """Like ``to_minor_units`` but rounds up, via exact decimal arithmetic.
+
+    Use for prices and notionals that feed limits: truncating a price understates exposure, and
+    float noise (``19.99 * 100 == 1998.99``) must not shave a cent off.
+    """
+    return int((Decimal(str(amount)) * _MINOR_UNITS_FACTOR).to_integral_value(ROUND_CEILING))
 
 
 def mean(data: Sequence[float]) -> float:

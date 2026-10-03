@@ -1,16 +1,21 @@
 """Futu security code normalisation.
 
-Futu codes are ``MARKET.CODE`` (``HK.00700``, ``US.AAPL``, ``SH.600519``). Configs and humans
-often write ``700.HK`` or ``AAPL.US``; normalise once at config load and use the Futu form
-everywhere else.
+Futu codes are ``MARKET.CODE`` (``HK.00700``, ``US.AAPL``, ``SH.600519``, ``CC.BTCUSD``).
+Configs and humans often write ``700.HK`` or ``AAPL.US``; normalise once at config load and
+use the Futu form everywhere else.
 """
 
 from __future__ import annotations
 
 from typing import Final
 
-MARKETS: Final[frozenset[str]] = frozenset({"HK", "US", "SH", "SZ", "SG", "JP", "AU"})
+CRYPTO_MARKET: Final[str] = "CC"
+MARKETS: Final[frozenset[str]] = frozenset(
+    {"HK", "US", "SH", "SZ", "SG", "JP", "AU", CRYPTO_MARKET}
+)
 _HK_CODE_WIDTH: Final[int] = 5
+# Futu crypto trading pairs are base+quote tickers (``BTCUSD``); ``CC.BTC`` is an index.
+_CRYPTO_MIN_PAIR_LEN: Final[int] = 6
 
 
 def normalize_symbol(raw: str) -> str:
@@ -41,6 +46,8 @@ def normalize_symbol(raw: str) -> str:
         if not code.isdigit():
             raise ValueError(f"HK codes are numeric: {raw!r}")
         code = code.lstrip("0").zfill(_HK_CODE_WIDTH)
+    elif market == CRYPTO_MARKET and not (code.isalnum() and len(code) >= _CRYPTO_MIN_PAIR_LEN):
+        raise ValueError(f"CC codes must be trading pairs such as CC.BTCUSD: {raw!r}")
     return f"{market}.{code}"
 
 
