@@ -194,7 +194,7 @@ def _live_client(settings: CryptoSettings, **kwargs: Any) -> FutuCryptoClient:
     return FutuCryptoClient(
         settings,
         trd_env=TrdEnv.REAL,
-        acc_id=281756479345015383,
+        acc_id=123456789012345678,
         max_retries=1,
         **kwargs,
     )
@@ -286,7 +286,7 @@ async def test_equity_client_rejects_fractional_qty() -> None:
 
 
 def test_live_gate_is_unchanged_for_crypto(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FUTU_ACCOUNT_ID", "281756479345015383")
+    monkeypatch.setenv("FUTU_ACCOUNT_ID", "123456789012345678")
     monkeypatch.delenv("TRADER_LIVE_CONFIRM", raising=False)
     cfg = load_config(CRYPTO_CONFIG)
     with pytest.raises(LiveModeRefusedError):  # SIMULATE config + --mode live

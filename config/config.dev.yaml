@@ -17,6 +17,13 @@ trading:
   max_open_orders: 15
   concentration_limit_pct: 0.25
   signal_cooldown_s: 45
+  crypto:
+    security_firm: ""  # FUTUSECURITIES | FUTUINC | FUTUSG (REAL only)
+    qty_step: 0.0001  # must match the precision the account accepts for the pair
+    min_qty: 0.0001
+    paper_base_price: 2000.0
+    paper_price_tick: 0.01
+    paper_cash: 100000.0
 risk:
   max_order_qty: 2000
   max_order_notional: 50000
