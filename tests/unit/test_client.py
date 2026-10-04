@@ -98,7 +98,7 @@ async def test_client_live_account_controls(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(client_module, "OpenSecTradeContext", FakeTradeContext)
 
     async with FutuClient(
-        allow_paper_fallback=False, max_retries=1, trd_env="REAL", acc_id=281756479345015383
+        allow_paper_fallback=False, max_retries=1, trd_env="REAL", acc_id=123456789012345678
     ) as client:
         await client.verify_account()
         await client.unlock_trade("md5hash")
@@ -107,9 +107,10 @@ async def test_client_live_account_controls(monkeypatch: pytest.MonkeyPatch) -> 
         )
         await client.cancel_all_orders()
         trade_ctx = client._trade_ctx
+    assert isinstance(trade_ctx, FakeTradeContext)
     assert trade_ctx.unlocked_with == "md5hash"
     assert trade_ctx.place_kwargs["remark"] == "c1"
-    assert trade_ctx.place_kwargs["acc_id"] == 281756479345015383
+    assert trade_ctx.place_kwargs["acc_id"] == 123456789012345678
     assert trade_ctx.cancel_all_calls == 1
 
 

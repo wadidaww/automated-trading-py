@@ -72,7 +72,7 @@ def test_configs_use_futu_symbols_and_simulate() -> None:
 
 @pytest.fixture
 def real_config(monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201
-    monkeypatch.setenv("FUTU_ACCOUNT_ID", "281756479345015383")
+    monkeypatch.setenv("FUTU_ACCOUNT_ID", "123456789012345678")
     cfg = load_config("config/config.dev.yaml")
     cfg.trading.trd_env = "REAL"
     return cfg
