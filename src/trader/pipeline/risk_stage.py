@@ -128,6 +128,24 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         except Exception:
             logger.warning("risk_state_unavailable", symbol=item.symbol, exc_info=True)
             return self._reject(item, "state_unavailable")
+        logger.info(
+            "risk_inputs",
+            symbol=item.symbol,
+            signal=item.signal.value,
+            confidence=round(item.confidence, 4),
+            signal_price=item.price,
+            broker_price=info.price,
+            lot_size=info.lot_size,
+            qty_step=info.qty_step,
+            tick_size=info.tick_size,
+            min_qty=info.min_qty,
+            portfolio_value_minor=state.portfolio_value_minor,
+            symbol_notional_minor=state.symbol_notional_minor,
+            positions_notional_minor=state.current_positions_notional_minor,
+            daily_pnl_minor=state.daily_pnl_minor,
+            open_orders=state.open_orders,
+            can_sell_qty=state.can_sell_qty,
+        )
         instrument = self._instrument(item.symbol, info)
         if isinstance(instrument, str):
             return self._reject(item, instrument)
@@ -171,7 +189,28 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         if abs(limit_price - reference_price) / reference_price > self._limits.price_band_pct:
             return self._reject(item, "price_band")
 
+        deviation = abs(limit_price - reference_price) / reference_price
+        logger.info(
+            "target_price",
+            symbol=item.symbol,
+            side=side,
+            signal_price=item.price,
+            limit_price=limit_price,
+            reference_price=reference_price,
+            deviation_pct=round(deviation * 100, 4),
+            price_band_pct=round(self._limits.price_band_pct * 100, 4),
+        )
         qty = self._size(item, side, state, limit_price, instrument)
+        logger.info(
+            "risk_sized",
+            symbol=item.symbol,
+            side=side,
+            qty=qty,
+            notional_minor=int(qty * to_minor_units_ceil(limit_price)),
+            min_qty=instrument.min_qty,
+            max_order_qty=self._limits.max_order_qty,
+            max_order_notional_minor=self._limits.max_order_notional_minor,
+        )
         if qty < instrument.min_qty or qty <= 0:
             return self._reject(item, "size_zero")
 
@@ -189,6 +228,14 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
                 reduces_position=reduces_position,
             )
         )
+        logger.info(
+            "risk_decision",
+            symbol=item.symbol,
+            approved=decision.approved,
+            reason=decision.reason,
+            qty=qty,
+            limit_price=limit_price,
+        )
         if decision.reason == "daily_loss_limit":
             self.kill_switch.trip("daily_loss_limit")
         if not decision.approved:
@@ -199,6 +246,14 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
             return self._reject(item, "order_rate_limit")
 
         self._seq += 1
+        logger.info(
+            "order_intent_created",
+            symbol=item.symbol,
+            side=side,
+            qty=qty,
+            limit_price=limit_price,
+            reference_price=reference_price,
+        )
         return OrderIntent(
             client_order_id=make_client_order_id(self._strategy, item.symbol, side, self._seq),
             symbol=item.symbol,
@@ -228,8 +283,15 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         kelly_fraction = self._kelly_fraction(item.confidence)
         if kelly_fraction <= 0:
             return 0
-        budget = int(
-            state.portfolio_value_minor * kelly_fraction * self._size_multiplier(item.confidence)
+        multiplier = self._size_multiplier(item.confidence)
+        budget = int(state.portfolio_value_minor * kelly_fraction * multiplier)
+        logger.info(
+            "kelly_sizing",
+            symbol=item.symbol,
+            confidence=round(item.confidence, 4),
+            kelly_fraction=round(kelly_fraction, 4),
+            size_multiplier=multiplier,
+            budget_minor=budget,
         )
         fractional = rules_for(item.symbol).fractional_qty
         if fractional:
