@@ -30,6 +30,11 @@ def _as_int(value: Any) -> int:
     return int(float(value))
 
 
+def _as_qty(value: Any) -> float:
+    """Coerce a raw quantity cell to float, keeping fractional (crypto) amounts intact."""
+    return float(value)
+
+
 def stock_info_from_snapshot(payload_df: pd.DataFrame, symbol: str) -> StockInfoResponse:
     """Build a typed stock snapshot from a market snapshot payload.
 
@@ -51,6 +56,7 @@ def stock_info_from_snapshot(payload_df: pd.DataFrame, symbol: str) -> StockInfo
         pb_ratio=first_value(row, ("pb_ratio",), float),
         lot_size=first_value(row, ("lot_size",), _as_int),
         listing_date=first_value(row, ("list_time",), str),
+        tick_size=first_value(row, ("price_spread",), float),
     )
 
 
@@ -72,8 +78,8 @@ def position_from_row(row: pd.Series) -> PositionResponse:
     """Build a typed position from a position payload row."""
     return PositionResponse(
         symbol=first_value(row, SYMBOL_COLUMNS, str, "UNKNOWN"),
-        quantity=first_value(row, ("qty",), _as_int, 0),
-        can_sell_qty=first_value(row, ("can_sell_qty",), _as_int, 0),
+        quantity=first_value(row, ("qty",), _as_qty, 0.0),
+        can_sell_qty=first_value(row, ("can_sell_qty",), _as_qty, 0.0),
         avg_cost=first_value(row, ("cost_price", "cost_price_valid"), float, 0.0),
         market_value=first_value(row, ("market_val",), float, 0.0),
         nominal_price=first_value(row, ("nominal_price", "last_price"), float, 0.0),
@@ -96,8 +102,8 @@ def order_status_from_row(row: pd.Series) -> OrderStatusResponse:
         status=first_value(row, ("order_status", "status"), str, "UNKNOWN"),
         symbol=first_value(row, SYMBOL_COLUMNS, str, "UNKNOWN"),
         order_side=TRADE_SIDES.get(raw_side),
-        qty=first_value(row, ("qty",), _as_int, 0),
-        dealt_qty=first_value(row, ("dealt_qty",), _as_int, 0),
+        qty=first_value(row, ("qty",), _as_qty, 0.0),
+        dealt_qty=first_value(row, ("dealt_qty",), _as_qty, 0.0),
         price=first_value(row, ("price",), float),
         avg_fill_price=first_value(row, ("dealt_avg_price", "avg_price"), float),
     )

@@ -27,8 +27,8 @@ class OrderUpdate:
     symbol: str
     side: Side
     status: OrderStatus
-    qty: int
-    filled_qty: int
+    qty: float
+    filled_qty: float
     avg_fill_price: float
     limit_price: float
     ts_ns: int
@@ -41,8 +41,8 @@ class PositionSnapshot:
     """Broker position row."""
 
     symbol: str
-    qty: int
-    can_sell_qty: int
+    qty: float
+    can_sell_qty: float
     avg_cost: float
     market_value: float
 

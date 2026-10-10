@@ -11,6 +11,9 @@ import pandas as pd
 from trader.model.base import ISignalModel, Signal
 from trader.pipeline.base import IStage
 from trader.pipeline.data_stage import FeatureWindow
+from trader.utils.logger import get_logger
+
+logger = get_logger("signal_stage")
 
 FEATURE_COLUMNS: Final[tuple[str, ...]] = (
     "z_score",
@@ -56,11 +59,31 @@ class SignalStage(IStage[FeatureWindow, TradeSignal | None]):
         now = time.time()
         last_time = self._last_signal_time.get(item.symbol, 0.0)
         if now - last_time < self._cooldown_seconds:
+            logger.info(
+                "signal_cooldown",
+                symbol=item.symbol,
+                remaining_s=round(self._cooldown_seconds - (now - last_time), 1),
+            )
             return None
 
         features = pd.DataFrame({name: [getattr(item, name)] for name in FEATURE_COLUMNS})
         prediction = self.model.predict(features)
+        logger.info(
+            "prediction",
+            symbol=item.symbol,
+            price=item.price,
+            signal=prediction.signal.value,
+            confidence=round(prediction.confidence, 4),
+            threshold=self.confidence_threshold,
+            metadata=prediction.metadata,
+        )
         if prediction.confidence < self.confidence_threshold:
+            logger.info(
+                "signal_below_threshold",
+                symbol=item.symbol,
+                confidence=round(prediction.confidence, 4),
+                threshold=self.confidence_threshold,
+            )
             return None
 
         self._last_signal_time[item.symbol] = now

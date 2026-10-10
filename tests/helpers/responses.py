@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from trader.misc.types.futu import TradeSide
 from trader.api.client import (
     OrderResponse,
     PortfolioConditionResponse,
@@ -35,9 +36,9 @@ def make_stock_info(
 
 def make_position(
     symbol: str,
-    quantity: int,
+    quantity: float,
     *,
-    can_sell_qty: int | None = None,
+    can_sell_qty: float | None = None,
     avg_cost: float = 90.0,
     market_value: float | None = None,
     nominal_price: float | None = None,
@@ -80,8 +81,8 @@ def make_portfolio_condition(
 
 def make_order(
     symbol: str,
-    side: str,
-    qty: int,
+    side: TradeSide,
+    qty: float,
     *,
     order_id: str | None = None,
     status: str = "SUBMITTED",

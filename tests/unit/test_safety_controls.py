@@ -66,7 +66,7 @@ def test_risk_settings_reject_futu_rate_limit() -> None:
 def test_configs_use_futu_symbols_and_simulate() -> None:
     for env in ("dev", "staging", "prod"):
         cfg = load_config(f"config/config.{env}.yaml")
-        assert cfg.trading.symbols == ["HK.00700"]
+        assert cfg.trading.symbols == (["CC.ETHUSD"] if env == "dev" else ["HK.00700"])
         assert cfg.trading.trd_env == "SIMULATE"
 
 

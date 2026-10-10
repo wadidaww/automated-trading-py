@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 
-from trader.api.client import FutuClient
+from trader.api.broker import BrokerClient
 from trader.api.quote_handler import QuoteHandler
 from trader.utils.logger import get_logger
 
@@ -21,7 +21,7 @@ class QuotePoller:
 
     def __init__(
         self,
-        client: FutuClient,
+        client: BrokerClient,
         handler: QuoteHandler,
         symbols: list[str],
         interval_s: float = 60.0,

@@ -19,7 +19,7 @@ class RiskInput:
     """Risk input model using int minor units for money values."""
 
     symbol: str
-    quantity: int
+    quantity: float
     price_minor: int
     current_symbol_notional_minor: int
     current_portfolio_notional_minor: int

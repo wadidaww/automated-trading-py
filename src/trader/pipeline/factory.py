@@ -7,7 +7,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any, TypedDict
 
+from trader.api.broker import BrokerClient
 from trader.api.client import FutuClient
+from trader.api.factory import create_client
 from trader.execution.order_manager import OrderManager
 from trader.model.base import ISignalModel
 from trader.model.ensemble import EnsembleSignalModel
@@ -88,10 +90,10 @@ class DefaultPipelineFactory(IPipelineFactory):
     def __init__(
         self,
         config: AppConfig | None = None,
-        client: FutuClient | None = None,
+        client: BrokerClient | None = None,
     ) -> None:
         self._config = config
-        self._client = client or FutuClient()
+        self._client = client or (create_client(config, "paper") if config else FutuClient())
         self._risk_settings = config.risk if config is not None else RiskSettings()
         self.kill_switch = KillSwitch(self._risk_settings.kill_switch_file)
         self.kill_switch.on_trip(self._cancel_all_on_trip)
@@ -210,9 +212,9 @@ class DefaultPipelineFactory(IPipelineFactory):
             )
         trading = self._config.trading
         return RiskEngineKwargs(
-            max_symbol_notional_minor=to_minor_units(trading.max_position_notional_hkd),
-            max_portfolio_notional_minor=to_minor_units(trading.max_portfolio_notional_hkd),
-            max_daily_loss_minor=to_minor_units(trading.max_daily_loss_hkd),
+            max_symbol_notional_minor=to_minor_units(trading.max_position_notional),
+            max_portfolio_notional_minor=to_minor_units(trading.max_portfolio_notional),
+            max_daily_loss_minor=to_minor_units(trading.max_daily_loss),
             max_open_orders=trading.max_open_orders,
             concentration_limit_pct=trading.concentration_limit_pct,
         )

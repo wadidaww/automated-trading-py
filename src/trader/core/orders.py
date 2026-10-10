@@ -148,7 +148,7 @@ class OrderIntent:
     client_order_id: str
     symbol: str
     side: Side
-    qty: int
+    qty: float
     limit_price: float
     strategy: str
     created_ns: int  # clock.now_ns() at decision time
@@ -164,7 +164,7 @@ class Fill:
     broker_order_id: str
     symbol: str
     side: Side
-    qty: int
+    qty: float
     price: float
     ts_ns: int
     fee: float = 0.0
@@ -177,13 +177,13 @@ class ManagedOrder:
     intent: OrderIntent
     status: OrderStatus = OrderStatus.PENDING_NEW
     broker_order_id: str | None = None
-    filled_qty: int = 0
+    filled_qty: float = 0.0
     avg_fill_price: float = 0.0
     reject_reason: str | None = None
     updated_ns: int = 0
     fills: list[Fill] = field(default_factory=list)
 
     @property
-    def remaining_qty(self) -> int:
+    def remaining_qty(self) -> float:
         """Quantity that may still fill."""
-        return 0 if self.status.is_terminal else max(self.intent.qty - self.filled_qty, 0)
+        return 0.0 if self.status.is_terminal else max(self.intent.qty - self.filled_qty, 0)

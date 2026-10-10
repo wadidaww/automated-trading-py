@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from trader.api.client import FutuClient
+from trader.api.broker import BrokerClient
 from trader.core.orders import (
     ManagedOrder,
     OrderIntent,
@@ -31,7 +31,7 @@ class OrderManager:
     managed order, so broker state can be reconciled against local state.
     """
 
-    def __init__(self, client: FutuClient, kill_switch: KillSwitch | None = None) -> None:
+    def __init__(self, client: BrokerClient, kill_switch: KillSwitch | None = None) -> None:
         self.client = client
         self._kill_switch = kill_switch
         self._orders: dict[str, ManagedOrder] = {}

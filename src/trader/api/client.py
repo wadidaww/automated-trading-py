@@ -50,7 +50,7 @@ __all__ = [
 MARKET_ORDER_PRICE = 0.0
 DEFAULT_ACCOUNT_ID = 0
 SYMBOL_FIELD = Field(..., description="Security code")
-QTY_FIELD = Field(..., gt=0, description="Quantity in shares")
+QTY_FIELD = Field(..., gt=0, description="Quantity (whole shares; decimal for crypto)")
 SIDE_FIELD = Field(..., pattern="^(BUY|SELL)$", description="BUY or SELL")
 PRICE_FIELD = Field(default=None, ge=0, description="Limit price if needed")
 ORDER_TYPE_FIELD = Field(default="MARKET", pattern="^(MARKET|LIMIT)$")
@@ -196,10 +196,8 @@ class FutuClient:
         """Open quote/trade contexts with bounded retries, reporting success."""
         for attempt in range(self.max_retries):
             try:
-                self._quote_ctx = OpenQuoteContext(host=self.host, port=self.port)
-                self._trade_ctx = OpenSecTradeContext(
-                    filter_trdmarket=self.trade_market, host=self.host, port=self.port
-                )
+                self._quote_ctx = self._new_quote_ctx()
+                self._trade_ctx = self._new_trade_ctx()
                 _ = Payload.str_payload(await asyncio.to_thread(self._quote_ctx.get_global_state))
                 self._connected = True
                 return True
@@ -207,6 +205,32 @@ class FutuClient:
                 await asyncio.to_thread(self._close_contexts)
                 await asyncio.sleep(min(2**attempt, 10) + random.random())
         return False
+
+    def _new_quote_ctx(self) -> OpenQuoteContext:
+        """Open the quote context (hook: crypto adds a security firm)."""
+        return OpenQuoteContext(host=self.host, port=self.port)
+
+    def _new_trade_ctx(self) -> OpenSecTradeContext:
+        """Open the trade context for this client's market (hook: crypto has its own context)."""
+        return OpenSecTradeContext(
+            filter_trdmarket=self.trade_market, host=self.host, port=self.port
+        )
+
+    def _order_params(self, order_type: str, qty: float) -> tuple[str, float, dict[str, Any]]:
+        """Resolve broker order type, quantity and extra ``place_order`` kwargs (hook).
+
+        Equities trade whole shares: a fractional quantity is refused here, not rounded.
+
+        Raises:
+            ValueError: When ``qty`` is not a whole number of shares.
+        """
+        if not float(qty).is_integer():
+            raise ValueError(f"equity quantity must be a whole number of shares: {qty}")
+        return ORDER_TYPES.get(order_type, OrderType.NORMAL), int(qty), {}
+
+    def _with_instrument_rules(self, info: StockInfoResponse) -> StockInfoResponse:
+        """Hook to attach market-specific instrument metadata to a snapshot."""
+        return info
 
     async def close(self) -> None:
         """Close API contexts."""
@@ -265,17 +289,17 @@ class FutuClient:
         """Get stock snapshot with valuation metrics."""
         await self._ready()
         if self._paper_fallback or self._quote_ctx is None:
-            return self._simulator.stock_info(symbol)
+            return self._with_instrument_rules(self._simulator.stock_info(symbol))
         payload_df = Payload.df_payload(
             await asyncio.to_thread(self._quote_ctx.get_market_snapshot, [symbol])
         )
-        return stock_info_from_snapshot(payload_df, symbol)
+        return self._with_instrument_rules(stock_info_from_snapshot(payload_df, symbol))
 
     @validate_call
     async def place_order(
         self,
         symbol: str = SYMBOL_FIELD,
-        qty: int = QTY_FIELD,
+        qty: float = QTY_FIELD,
         side: TradeSide = SIDE_FIELD,
         order_type: str = ORDER_TYPE_FIELD,
         price: float | None = PRICE_FIELD,
@@ -285,14 +309,14 @@ class FutuClient:
 
         Args:
             symbol: Security code.
-            qty: Quantity in shares.
+            qty: Quantity: whole shares, or a decimal amount for crypto.
             side: BUY or SELL.
             order_type: MARKET or LIMIT.
             price: Limit price (required for LIMIT orders).
             remark: Client order id echoed back by Futu, used for reconciliation.
         """
         await self._ready()
-        resolved_order_type = ORDER_TYPES.get(order_type, OrderType.NORMAL)
+        resolved_order_type, send_qty, extra = self._order_params(order_type, qty)
         resolved_price = _resolve_order_price(resolved_order_type, price)
         trade_ctx = self._trade_ctx
         if self._paper_fallback or trade_ctx is None:
@@ -301,13 +325,14 @@ class FutuClient:
             await asyncio.to_thread(
                 trade_ctx.place_order,
                 resolved_price,
-                qty,
+                send_qty,
                 symbol,
                 side,
                 order_type=resolved_order_type,
                 trd_env=self.trd_env,
                 acc_id=self._resolve_acc_id(),
                 remark=remark,
+                **extra,
             )
         )
         if payload_df.empty:

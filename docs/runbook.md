@@ -36,6 +36,25 @@ reported as `skip` when their prerequisite failed.
 - stdout: single result line — `ok` or `fail: <check>: <detail>`.
 - exit code: `0` when nothing failed (warnings allowed), `1` otherwise.
 
+## Crypto trading (Futu `CC.*` spot)
+
+Crypto runs through the same pipeline; `trading.market: "CC"` selects `FutuCryptoClient`
+(`src/trader/api/factory.py`). Start from `config/config.crypto.dev.yaml`.
+
+- **Paper:** Futu has no SIMULATE for crypto, so `--mode paper` uses the local simulator
+  (`trading.crypto.paper_*`). It never sends crypto orders to OpenD.
+- **Live:** `trd_env: REAL`, `--mode live`, `TRADER_LIVE_CONFIRM=1`, a numeric account id and
+  `FUTU_SECURITY_FIRM` (`FUTUSECURITIES`, `FUTUINC` or `FUTUSG`). It needs `futu-api >= 10.5.6508`
+  (the repo pins `^9.0`, which has no `OpenCryptoTradeContext`) and the pair must be on the
+  account's whitelist. An unreachable OpenD is an error, never a paper fallback.
+- **Orders:** LIMIT is GTC and MARKET is IOC. Orders cannot be modified, only cancelled. Spot only,
+  so `allow_short` stays false.
+- **Sizing:** quantities are decimals on `trading.crypto.qty_step` (minimum `min_qty`); set both to
+  what the account accepts for the pair. The tick comes from the broker snapshot (`price_spread`);
+  if it is missing the signal is rejected (`no_tick_size`).
+- **Limits** (`max_position_notional`, `max_portfolio_notional`, `max_daily_loss`) are in the account
+  currency (USD for crypto). The old `*_hkd` keys still load.
+
 ## Running backtests
 
 ```bash

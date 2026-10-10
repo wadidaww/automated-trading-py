@@ -7,9 +7,8 @@ import contextlib
 import os
 import signal
 
-from futu import TrdEnv
-
-from trader.api.client import FutuClient
+from trader.api.broker import BrokerClient
+from trader.api.factory import create_client
 from trader.api.quote_handler import QuoteHandler
 from trader.api.quote_poller import QuotePoller
 from trader.pipeline.pipeline import TradingPipeline
@@ -49,8 +48,8 @@ def check_live_opt_in(config: AppConfig, mode: str) -> None:
         raise LiveModeRefusedError("--mode live requires a numeric trading.account_id")
 
 
-def build_client(config: AppConfig, mode: str) -> FutuClient:
-    """Build a FutuClient from config and mode.
+def build_client(config: AppConfig, mode: str) -> BrokerClient:
+    """Build the broker client for ``config.trading.market`` (see ``trader.api.factory``).
 
     Live mode never falls back to the paper simulator: an unreachable gateway is an error.
 
@@ -59,25 +58,12 @@ def build_client(config: AppConfig, mode: str) -> FutuClient:
         mode: Trading mode (paper or live).
 
     Returns:
-        Configured FutuClient instance.
+        Configured client: ``FutuClient`` for equities, ``FutuCryptoClient`` for crypto.
     """
-    account_id = config.trading.account_id
-    acc_id = int(account_id) if account_id.isdigit() else None
-    return FutuClient(
-        host=config.opend.host,
-        port=config.opend.port,
-        max_retries=config.opend.reconnect_max_attempts,
-        heartbeat_interval_s=config.opend.heartbeat_interval_s,
-        rate_limit_requests=config.opend.rate_limit_requests,
-        rate_limit_window_s=config.opend.rate_limit_window_s,
-        trade_market=config.trading.market,
-        trd_env=TrdEnv.REAL if mode == "live" else TrdEnv.SIMULATE,
-        acc_id=acc_id,
-        allow_paper_fallback=mode != "live",
-    )
+    return create_client(config, mode)
 
 
-async def prepare_live(client: FutuClient, config: AppConfig) -> None:
+async def prepare_live(client: BrokerClient, config: AppConfig) -> None:
     """Verify the REAL account and unlock trading before the first decision.
 
     Raises:
@@ -91,13 +77,13 @@ async def prepare_live(client: FutuClient, config: AppConfig) -> None:
     await client.unlock_trade(password_md5)
 
 
-async def _run_pipeline(client: FutuClient, config: AppConfig, duration: int) -> None:
+async def _run_pipeline(client: BrokerClient, config: AppConfig, duration: int) -> None:
     """Start the pipeline and quote poller, then run until the duration ends or SIGTERM.
 
     SIGTERM and SIGINT stop the run gracefully; SIGUSR1 trips the kill switch.
 
     Args:
-        client: Connected FutuClient.
+        client: Connected broker client.
         config: Application configuration.
         duration: Runtime duration in seconds.
     """
@@ -153,7 +139,7 @@ async def _watch_kill_switch(kill_switch: KillSwitch, interval_s: float = 1.0) -
 async def _shutdown(
     poller: QuotePoller,
     pipeline: TradingPipeline,
-    client: FutuClient,
+    client: BrokerClient,
     *,
     cancel_on_exit: bool,
 ) -> None:

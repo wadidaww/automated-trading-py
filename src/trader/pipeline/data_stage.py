@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from trader.api.quote_handler import QuoteEvent
 from trader.data import indicators
 from trader.pipeline.base import IStage
+from trader.utils.logger import get_logger
 from trader.utils.maths import mean, std_dev, z_score
+
+logger = get_logger("data_stage")
 
 # Fewer points than this and the window is too thin for any feature.
 _MIN_POINTS = 5
@@ -51,6 +54,13 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
         window.append(item.price)
 
         if len(window) < _MIN_POINTS:
+            logger.info(
+                "quote_received",
+                symbol=item.symbol,
+                price=item.price,
+                window_points=len(window),
+                warming_up=True,
+            )
             return FeatureWindow(symbol=item.symbol, price=item.price, z_score=0.0)
 
         prices = list(window)
@@ -68,4 +78,19 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
             price_acceleration=indicators.acceleration(previous, item.price),
         )
         previous.append(item.price)
+        logger.info(
+            "features_computed",
+            symbol=item.symbol,
+            price=item.price,
+            window_points=len(prices),
+            window_mean=round(centre, 6),
+            window_std=round(spread, 6),
+            z_score=round(features.z_score, 4),
+            momentum=round(features.momentum, 4),
+            trend_strength=round(features.trend_strength, 4),
+            volatility=round(features.volatility, 4),
+            rsi=round(features.rsi, 2),
+            bb_position=round(features.bb_position, 4),
+            price_acceleration=round(features.price_acceleration, 4),
+        )
         return features

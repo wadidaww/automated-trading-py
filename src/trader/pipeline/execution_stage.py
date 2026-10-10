@@ -36,6 +36,15 @@ class ExecutionStage(IStage[OrderIntent, OrderReceipt]):
         Returns:
             OrderReceipt with the client id, Futu order id and internal status.
         """
+        logger.info(
+            "order_submitting",
+            symbol=item.symbol,
+            side=item.side,
+            qty=item.qty,
+            limit_price=item.limit_price,
+            reference_price=item.reference_price,
+            client_order_id=item.client_order_id,
+        )
         try:
             order = await self.order_manager.place(item)
         except Exception:

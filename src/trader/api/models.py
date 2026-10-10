@@ -21,7 +21,7 @@ class OrderResponse(BaseModel):
     status: str
     symbol: str | None = None
     order_side: TradeSide | None = None
-    qty: int | None = None
+    qty: float | None = None
     price: float | None = None
 
 
@@ -34,6 +34,11 @@ class StockInfoResponse(BaseModel):
     pe_ratio: float | None = None
     pb_ratio: float | None = None
     lot_size: int | None = None
+    # Crypto instrument metadata (equities use lot_size). tick_size comes from the broker snapshot;
+    # the quantity step and minimum come from the client's configured instrument rules.
+    tick_size: float | None = None
+    qty_step: float | None = None
+    min_qty: float | None = None
     listing_date: str | None = None
 
 
@@ -41,8 +46,8 @@ class PositionResponse(BaseModel):
     """Typed current position response."""
 
     symbol: str
-    quantity: int
-    can_sell_qty: int
+    quantity: float
+    can_sell_qty: float
     avg_cost: float
     market_value: float
     nominal_price: float
@@ -75,8 +80,8 @@ class OrderStatusResponse(BaseModel):
     status: str
     symbol: str
     order_side: TradeSide | None = None
-    qty: int = 0
-    dealt_qty: int = 0
+    qty: float = 0.0
+    dealt_qty: float = 0.0
     price: float | None = None
     avg_fill_price: float | None = None
 
