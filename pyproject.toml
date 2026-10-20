@@ -28,6 +28,7 @@ watchfiles = "^0.21"
 plotly = "^5.20"
 aiosqlite = "^0.20"
 pyyaml = "^6.0"
+lightgbm = "^4.5"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.1"

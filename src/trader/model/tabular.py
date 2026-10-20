@@ -39,7 +39,11 @@ def _linear(task: Task, params: dict[str, Any]) -> Any:
 
     if task == "regression":
         return make_pipeline(StandardScaler(), Ridge(**params))
-    return make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000, **params))
+    # One regularisation knob for both tasks: ridge ``alpha`` maps to logistic ``C = 1 / alpha``.
+    logistic = dict(params)
+    if "alpha" in logistic:
+        logistic["C"] = 1.0 / float(logistic.pop("alpha"))
+    return make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000, **logistic))
 
 
 def _sklearn_gbm(task: Task, params: dict[str, Any]) -> Any:

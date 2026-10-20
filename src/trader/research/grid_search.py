@@ -57,6 +57,7 @@ class DataSection(BaseModel):
     start: date | None = None
     end: date | None = None
     synthetic_bars: int = 1000
+    synthetic_autocorrelation: float = 0.1
 
 
 class ModelSection(BaseModel):
@@ -92,12 +93,17 @@ class OutputSection(BaseModel):
     refit_best: bool = True
 
 
+def _one_default() -> list[dict[str, Any]]:
+    """A single option with every field at its default."""
+    return [{}]
+
+
 class GridSpec(BaseModel):
     """The whole search, as loaded from YAML."""
 
     data: DataSection = Field(default_factory=DataSection)
-    features: list[dict[str, Any]] = Field(default_factory=lambda: [{}])
-    labels: list[dict[str, Any]] = Field(default_factory=lambda: [{}])
+    features: list[dict[str, Any]] = Field(default_factory=_one_default)
+    labels: list[dict[str, Any]] = Field(default_factory=_one_default)
     rank_features: list[bool] = Field(default_factory=lambda: [False])
     models: list[ModelSection] = Field(default_factory=lambda: [ModelSection(estimator="lightgbm")])
     validation: ValidationSection = Field(default_factory=ValidationSection)
@@ -183,7 +189,11 @@ def load_bars(section: DataSection) -> dict[str, pd.DataFrame]:
     bars: dict[str, pd.DataFrame] = {}
     for offset, symbol in enumerate(section.symbols):
         if section.source == "synthetic":
-            frame = synthetic_bars(n_bars=section.synthetic_bars, seed=offset)
+            frame = synthetic_bars(
+                n_bars=section.synthetic_bars,
+                seed=offset,
+                autocorrelation=section.synthetic_autocorrelation,
+            )
         else:
             frame = load_history(symbol, section.ktype, section.cache_dir)
         if section.start is not None:
@@ -206,8 +216,9 @@ def data_hash(bars: dict[str, pd.DataFrame]) -> str:
 def code_sha() -> str:
     """Current git commit, or ``unknown`` outside a checkout."""
     try:
+        # Fixed argv, no user input.
         result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607
+            ["git", "rev-parse", "--short", "HEAD"],  # noqa: S603, S607
             capture_output=True,
             text=True,
             check=True,
@@ -365,8 +376,8 @@ def _print_progress(record: TrialRecord, total: int) -> None:
         return
     m = record.metrics
     print(
-        f"{head} -> rank_ic={m.rank_ic:.4f} sharpe_annual={m.sharpe_annual:.2f} "
-        f"turnover={m.turnover:.2f}"
+        f"{head} -> rank_ic={m.rank_ic:.4f} sharpe_net={m.sharpe_annual:.2f} "
+        f"sharpe_gross={m.sharpe_annual_gross:.2f} turnover={m.turnover:.2f}"
     )
 
 

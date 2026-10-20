@@ -105,9 +105,10 @@ def _small_spec(tmp_path: Path) -> GridSpec:
                 "source": "synthetic",
                 "symbols": ["HK.00001", "HK.00002"],
                 "synthetic_bars": 450,
+                "synthetic_autocorrelation": 0.3,
             },
             "features": [
-                {"groups": ["momentum", "volatility"], "windows": [5, 20]},
+                {"groups": ["reversal", "volatility"], "windows": [5, 20]},
                 {"groups": ["live"], "live_window": 30},
             ],
             "labels": [

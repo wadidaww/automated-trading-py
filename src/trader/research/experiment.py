@@ -52,6 +52,7 @@ class TrialMetrics:
     n_obs: int
     sharpe: float
     sharpe_annual: float
+    sharpe_annual_gross: float
     annual_return: float
     max_drawdown: float
     turnover: float
@@ -128,6 +129,8 @@ def score_predictions(
         positions, dataset.next_return.loc[scores.index], backtest.cost_bps
     )
     stats = strategy_stats(returns, turnover, backtest.periods_per_year)
+    gross, _ = strategy_returns(positions, dataset.next_return.loc[scores.index], 0.0)
+    gross_stats = strategy_stats(gross, turnover, backtest.periods_per_year)
     return TrialMetrics(
         ic=ic,
         rank_ic=rank_ic,
@@ -137,6 +140,7 @@ def score_predictions(
         n_obs=stats.n_obs,
         sharpe=stats.sharpe,
         sharpe_annual=stats.sharpe_annual,
+        sharpe_annual_gross=gross_stats.sharpe_annual,
         annual_return=stats.annual_return,
         max_drawdown=stats.max_drawdown,
         turnover=stats.turnover,
