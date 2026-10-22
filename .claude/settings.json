@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(mypy src:*)",
+      "Bash(pytest:*)",
+      "Bash(PYTHONPATH=src pytest:*)",
+      "Bash(poetry run ruff:*)",
+      "Bash(poetry run mypy:*)",
+      "Bash(poetry run pytest:*)",
+      "Bash(poetry env info:*)",
+      "Bash(PYTHONPATH=src python -m trader.research.grid_search:*)",
+      "Bash(PYTHONPATH=src python -m trader.research.plan_backtest:*)",
+      "Bash(PYTHONPATH=src python scripts/run_backtest.py:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Edit(./.env)",
+      "Write(./.env)",
+      "Bash(python -m trader --mode live:*)",
+      "Bash(PYTHONPATH=src python -m trader --mode live:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_live_trading.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -34,7 +34,7 @@ safety) and the `live-trading-safety` skill.
 ## Rules
 - In `--mode live` it is **forbidden** to fall back to simulated or paper orders. If OpenD is
   unavailable in live mode, the process refuses to trade and exits non-zero.
-- Futu is not installed in the CI or dev containers: put the SDK behind the `FutuClient`
+- No OpenD runs in CI or dev containers (futu-api is installed, nothing to connect to): put the SDK behind the `FutuClient`
   interface and test with the fakes in `tests/helpers/fakes.py`. Never make a test depend on a
   running OpenD.
 - Verify API names, enum values and limits against the current futu-api docs
