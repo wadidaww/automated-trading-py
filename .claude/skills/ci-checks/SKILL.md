@@ -13,7 +13,10 @@ disagree; the workflow wins.
 - Poetry env present (`poetry env info -p` prints a path): prefix each command with
   `poetry run`. This matches CI and has the locked versions.
 - Otherwise use the tools on `PATH` from the active conda env (see `AGENTS.md`). Say in your
-  report that versions may differ from the lock.
+  report that versions may differ from the lock. Ruff versions disagree on where a `noqa` must
+  sit and on formatting Markdown, so check with the locked one when `uvx` is available:
+  `uvx ruff@0.4.10 check src/ tests/` and `uvx ruff@0.4.10 format --check .` (version from
+  `poetry.lock`).
 - Always set `PYTHONPATH=src`.
 
 ## 2. Run, in CI order

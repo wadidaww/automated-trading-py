@@ -10,14 +10,17 @@ from pathlib import Path
 import pytest
 
 HOOK = Path(__file__).resolve().parents[2] / ".claude" / "hooks" / "guard_live_trading.py"
+_CMD = [sys.executable, str(HOOK)]
+
+
+def _invoke(stdin: str) -> int:
+    # Fixed interpreter and script path, so S603 (untrusted input) does not apply.
+    proc = subprocess.run(_CMD, input=stdin, capture_output=True, text=True)  # noqa: S603
+    return proc.returncode
 
 
 def _run(tool_name: str, tool_input: dict[str, object]) -> int:
-    payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
-    result = subprocess.run(  # noqa: S603 - fixed interpreter and script path
-        [sys.executable, str(HOOK)], input=payload, capture_output=True, text=True, check=False
-    )
-    return result.returncode
+    return _invoke(json.dumps({"tool_name": tool_name, "tool_input": tool_input}))
 
 
 @pytest.mark.parametrize(
@@ -68,7 +71,4 @@ def test_allows_simulate_configs_and_real_outside_config() -> None:
 
 def test_blocks_writing_dotenv_and_tolerates_bad_payloads() -> None:
     assert _run("Write", {"file_path": "/repo/.env", "content": "FUTU_ACCOUNT_ID=1"}) == 2
-    result = subprocess.run(  # noqa: S603 - fixed interpreter and script path
-        [sys.executable, str(HOOK)], input="not json", capture_output=True, text=True, check=False
-    )
-    assert result.returncode == 0
+    assert _invoke("not json") == 0
