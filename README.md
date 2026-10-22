@@ -101,7 +101,7 @@ Trading involves substantial risk of loss. Use paper trading and staged deployme
 ruff check src/ tests/
 ruff format --check .
 mypy src
-PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail-under=64
+PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail-under=75
 ```
 
 ## Documentation

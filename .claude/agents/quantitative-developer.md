@@ -38,6 +38,6 @@ Before you start, read `AGENTS.md`. Load these skills when they apply:
 3. Implement the smallest change that satisfies the test; wire new components through
    `trader.pipeline.factory`, not by hand in `pipeline.py`.
 4. Run `ruff check src/ tests/`, `ruff format --check .`, `mypy src`, and
-   `pytest tests/unit tests/integration --cov=src/trader --cov-fail-under=64` (with `PYTHONPATH=src`).
+   `pytest tests/unit tests/integration --cov=src/trader --cov-fail-under=75` (with `PYTHONPATH=src`).
 5. Report what changed, the numbers you measured, and anything you could not verify
    (for example, futu-api not installed).
