@@ -73,9 +73,13 @@ Stages chain via typed dataclasses; each stage implements `IStage[InputT, Output
 | `ApprovedOrder` | `trader.pipeline.risk_stage` | symbol, qty, side, price |
 | `OrderReceipt` | `trader.pipeline.execution_stage` | order_id, status |
 
-## `DataNormalizer` (`src/trader/data/normalizer.py`)
+## Features (`src/trader/data/features.py`)
 
-Stateless feature engineering. Static method `add_features(df)` adds: RSI-14, MACD, Bollinger Bands, VWAP, OBV, log return, realized volatility, z-score, and lag features.
+`window_features(prices, previous)` computes the live `DataStage` features; `live_feature_frame(close, window)` replays it over bar history for training. `build_features(bars, FeatureSpec)` builds the vectorised research groups: `momentum`, `reversal`, `trend`, `oscillators`, `volatility`, `volume` and `live`.
+
+## Research (`src/trader/research/`)
+
+`labels` (forward return, triple barrier), `validation` (purged walk-forward), `scoring` (IC, net-of-cost strategy, deflated Sharpe), `grid_search` (CLI: `python -m trader.research.grid_search --spec <yaml>`).
 
 ## `RiskEngine` (`src/trader/risk/risk_engine.py`)
 
@@ -91,7 +95,7 @@ Fractional Kelly position sizing. `calculate(win_rate, win_loss_ratio)` returns 
 
 Abstract interface for signal models. Implement `predict(features)`, `fit(X, y)`, `save(path)`, `load(path)`.
 
-Implementations: `MeanReversionModel`, `EnsembleSignalModel`, `GradientBoostingModel`, `TransformerPriceModel`.
+Implementations: `MeanReversionModel`, `EnsembleSignalModel`, `GradientBoostingModel`, `TabularModel` (LightGBM, ridge/logistic, sklearn histogram GBM), `TransformerPriceModel`.
 
 Selected via `model.type` in config: `mean_reversion` (default), `ensemble`, `gradient_boosting` (falls back to `mean_reversion` if scikit-learn is unavailable).
 

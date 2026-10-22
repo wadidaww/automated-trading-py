@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, TypedDict
 
 from trader.api.broker import BrokerClient
 from trader.api.client import FutuClient
 from trader.api.factory import create_client
+from trader.data.features import LIVE_FEATURES
 from trader.execution.order_manager import OrderManager
 from trader.model.base import ISignalModel
 from trader.model.ensemble import EnsembleSignalModel
 from trader.model.mean_reversion import MeanReversionModel
+from trader.model.tabular import ESTIMATORS as TABULAR_ESTIMATORS
 from trader.pipeline.audit_stage import AuditStage
 from trader.pipeline.data_stage import DataStage
 from trader.pipeline.execution_stage import ExecutionStage
@@ -101,6 +105,10 @@ class DefaultPipelineFactory(IPipelineFactory):
         self._model_builders: dict[str, Callable[[], ISignalModel]] = {
             "ensemble": self._create_ensemble_model,
             "gradient_boosting": self._create_gradient_boosting_model,
+            **{
+                name: functools.partial(self._create_tabular_model, name)
+                for name in (*TABULAR_ESTIMATORS, "tabular")
+            },
         }
 
     def create_data_stage(self) -> DataStage:
@@ -117,6 +125,8 @@ class DefaultPipelineFactory(IPipelineFactory):
         Supports model types:
         - "mean_reversion": Enhanced mean reversion with momentum confirmation
         - "ensemble": Weighted ensemble of mean reversion models
+        - "gradient_boosting", "tabular" and every ``TabularModel`` estimator: fitted artifacts
+          loaded from ``model.path``; startup fails if the artifact is missing
         """
         model_cfg = self._config.model if self._config else None
         threshold = model_cfg.confidence_threshold if model_cfg else DEFAULT_CONFIDENCE_THRESHOLD
@@ -140,16 +150,40 @@ class DefaultPipelineFactory(IPipelineFactory):
             return MeanReversionModel()
         return builder()
 
-    @staticmethod
-    def _create_gradient_boosting_model() -> ISignalModel:
-        """Create gradient boosting model, falling back to mean reversion."""
-        try:
-            from trader.model.gradient_boosting import GradientBoostingModel
+    def _model_path(self, model_type: str) -> Path:
+        """Fitted artifact for an ML model type; fails at startup, not on every tick."""
+        if self._config is None:
+            raise ValueError(f"model type {model_type!r} needs a config with model.path")
+        path = Path(self._config.model.path)
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"model type {model_type!r} needs a fitted artifact at {path}; train one with "
+                "trader.model.trainer or trader.research.grid_search"
+            )
+        return path
 
-            return GradientBoostingModel()
-        except ImportError:
-            logger.warning("gradient_boosting_not_available, falling back to mean_reversion")
-            return MeanReversionModel()
+    def _create_gradient_boosting_model(self) -> ISignalModel:
+        """Load the fitted sklearn gradient boosting classifier from ``model.path``."""
+        from trader.model.gradient_boosting import GradientBoostingModel
+
+        return GradientBoostingModel.load(str(self._model_path("gradient_boosting")))
+
+    def _create_tabular_model(self, model_type: str) -> ISignalModel:
+        """Load a fitted ``TabularModel`` and check it only needs live ``DataStage`` features."""
+        from trader.model.tabular import TabularModel
+
+        model = TabularModel.load(str(self._model_path(model_type)))
+        missing = sorted(set(model.feature_names) - set(LIVE_FEATURES))
+        if missing:
+            raise ValueError(
+                f"model at {self._config.model.path if self._config else ''} uses features the "
+                f"live pipeline does not compute: {missing}; train it on the 'live' feature group"
+            )
+        if model.estimator != model_type and model_type != "tabular":
+            raise ValueError(
+                f"model.type is {model_type!r} but the artifact is a {model.estimator!r} model"
+            )
+        return model
 
     def _create_ensemble_model(self) -> EnsembleSignalModel:
         """Create the weighted ensemble of mean reversion variants in ``ENSEMBLE_MEMBERS``."""

@@ -52,10 +52,10 @@ Models implement `ISignalModel` (`src/trader/model/base.py`):
 
 ## Feature engineering
 
-`DataNormalizer` (`src/trader/data/normalizer.py`) is a stateless batch helper for
-training/backtest frames: RSI-14, MACD, Bollinger Bands, VWAP, OBV, log return,
-realized volatility, z-score, and close lags. Live per-quote features come from
-`DataStage`, which maintains its own rolling windows.
+`src/trader/data/features.py` is the single feature module. `DataStage` calls
+`window_features` on each quote's rolling window; training replays the same function over
+bar history (`live_feature_frame`), with a parity test. Research-only groups (momentum,
+reversal, trend, oscillators, volatility, volume) are vectorised in `build_features`.
 
 ## Risk engine
 

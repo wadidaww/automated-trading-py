@@ -8,6 +8,7 @@ from typing import Final
 
 import pandas as pd
 
+from trader.data.features import LIVE_FEATURES
 from trader.model.base import ISignalModel, Signal
 from trader.pipeline.base import IStage
 from trader.pipeline.data_stage import FeatureWindow
@@ -15,15 +16,7 @@ from trader.utils.logger import get_logger
 
 logger = get_logger("signal_stage")
 
-FEATURE_COLUMNS: Final[tuple[str, ...]] = (
-    "z_score",
-    "momentum",
-    "trend_strength",
-    "volatility",
-    "rsi",
-    "bb_position",
-    "price_acceleration",
-)
+FEATURE_COLUMNS: Final[tuple[str, ...]] = LIVE_FEATURES
 
 
 @dataclass(slots=True)

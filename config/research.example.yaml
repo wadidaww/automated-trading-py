@@ -1,0 +1,63 @@
+# Grid search spec for `python -m trader.research.grid_search --spec config/research.example.yaml`.
+# Any scalar given as a list is a grid dimension. `groups` and `windows` are lists already, so
+# give a list of lists to search over them. Trials = features x labels x rank_features x models.
+# This example is 2 x 3 x 1 x (8 + 3) = 66 trials.
+
+data:
+  source: csv              # csv (cache from scripts/fetch_historical_data.py) or synthetic
+  symbols: [HK.00700, HK.09988, HK.03690, HK.01810, HK.00388]
+  ktype: K_DAY
+  cache_dir: data/raw
+  start: 2016-01-01
+  end: null
+
+features:
+  # Research feature set (cannot run live yet: DataStage only computes the `live` group).
+  - groups: [momentum, reversal, trend, oscillators, volatility, volume]
+    windows: [5, 20, 60]
+  # The live DataStage features; a winner here can be deployed with model.type = its estimator.
+  - groups: [live]
+    live_window: 120
+
+labels:
+  - kind: forward_return
+    horizon: [5, 10]
+    vol_scale: true
+  - kind: triple_barrier
+    horizon: 10
+    profit_take: 2.0
+    stop_loss: 2.0
+
+# Cross-sectional percentile ranks per date; worth trying with several symbols.
+rank_features: [false]
+
+models:
+  - estimator: lightgbm
+    params:
+      n_estimators: [200, 500]
+      learning_rate: [0.02, 0.05]
+      num_leaves: [15, 31]
+      min_child_samples: 50
+      subsample: 0.8
+      subsample_freq: 1
+      colsample_bytree: 0.8
+  - estimator: linear      # ridge (regression) / logistic (classification): the baseline to beat
+    params:
+      alpha: [1.0, 10.0, 100.0]
+
+validation:
+  n_splits: 5
+  embargo: 5               # extra bars purged on top of the label horizon
+  min_train: 504           # first training window, in trading days
+  expanding: true
+
+backtest:
+  cost_bps: 25             # one-way cost per unit traded; HK stamp duty alone is 10 bps
+  long_only: true
+  deadband: 0.0            # |score| at or below this is flat
+  periods_per_year: 252
+
+output:
+  dir: data/research
+  select_by: sharpe        # sharpe | rank_ic | icir
+  refit_best: true

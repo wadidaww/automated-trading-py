@@ -6,16 +6,11 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 
 from trader.api.quote_handler import QuoteEvent
-from trader.data import indicators
+from trader.data.features import ACCELERATION_HISTORY, MIN_WINDOW_POINTS, window_features
 from trader.pipeline.base import IStage
 from trader.utils.logger import get_logger
-from trader.utils.maths import mean, std_dev, z_score
 
 logger = get_logger("data_stage")
-
-# Fewer points than this and the window is too thin for any feature.
-_MIN_POINTS = 5
-_ACCELERATION_HISTORY = 10
 
 
 @dataclass(slots=True)
@@ -36,15 +31,15 @@ class FeatureWindow:
 class DataStage(IStage[QuoteEvent, FeatureWindow]):
     """Convert raw quotes to feature windows over a per-symbol rolling price window.
 
-    Features are the pure functions in ``trader.data.indicators`` plus the z-score of the latest
-    price against the window.
+    Features come from ``trader.data.features.window_features``, the same function training uses
+    (via ``live_feature_frame``), so live and offline features cannot drift apart.
     """
 
     def __init__(self, window_size: int = 100) -> None:
         self._window_size = window_size
         self._prices: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=window_size))
         self._prev_prices: dict[str, deque[float]] = defaultdict(
-            lambda: deque(maxlen=_ACCELERATION_HISTORY)
+            lambda: deque(maxlen=ACCELERATION_HISTORY)
         )
 
     async def process(self, item: QuoteEvent) -> FeatureWindow:
@@ -53,7 +48,7 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
         previous = self._prev_prices[item.symbol]
         window.append(item.price)
 
-        if len(window) < _MIN_POINTS:
+        if len(window) < MIN_WINDOW_POINTS:
             logger.info(
                 "quote_received",
                 symbol=item.symbol,
@@ -64,18 +59,8 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
             return FeatureWindow(symbol=item.symbol, price=item.price, z_score=0.0)
 
         prices = list(window)
-        centre = mean(prices)
-        spread = std_dev(prices)
         features = FeatureWindow(
-            symbol=item.symbol,
-            price=item.price,
-            z_score=z_score(item.price, centre, spread) if spread > 0 else 0.0,
-            momentum=indicators.momentum(prices),
-            trend_strength=indicators.trend_strength(prices),
-            volatility=indicators.volatility(prices),
-            rsi=indicators.rsi(prices),
-            bb_position=indicators.bollinger_position(prices, centre, spread),
-            price_acceleration=indicators.acceleration(previous, item.price),
+            symbol=item.symbol, price=item.price, **window_features(prices, previous)
         )
         previous.append(item.price)
         logger.info(
@@ -83,8 +68,6 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
             symbol=item.symbol,
             price=item.price,
             window_points=len(prices),
-            window_mean=round(centre, 6),
-            window_std=round(spread, 6),
             z_score=round(features.z_score, 4),
             momentum=round(features.momentum, 4),
             trend_strength=round(features.trend_strength, 4),

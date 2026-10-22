@@ -17,7 +17,7 @@ Before you start, read `AGENTS.md`. Load these skills when they apply:
 ## Non-negotiables
 - **One code path.** Features, signals and sizing are pure functions or classes shared by
   `DataStage`/`SignalStage`/`RiskStage` and the backtester. Never keep a second copy of a feature
-  formula; delete or reuse `trader.data.normalizer` rather than let it drift from `DataStage`.
+  formula; extend `trader.data.features` (shared by `DataStage` and training) instead.
 - **No look-ahead.** A decision at time t uses only data with timestamp ≤ t. Labels use forward
   windows and are aligned explicitly, with a test that shifts data and asserts the result changes.
 - **Inject the clock.** Never call `time.time()` or `datetime.now()` inside strategy logic.
