@@ -15,4 +15,5 @@ src/samples
 .vscode
 .env
 
-.opencodedata/research/
+.opencode
+data/research/
