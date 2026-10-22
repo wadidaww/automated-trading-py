@@ -40,6 +40,7 @@ PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-report
 - CI: `ci.yml` (lint+test), `backtest.yml`, `model-train.yml`, `paper-trade.yml`, `deploy-prod.yml` (placeholder build + approval gate to `ghcr.io/<repo>:latest`). Dockerfile `ENTRYPOINT python -m trader`.
 - `scripts/fetch_historical_data.py` downloads bars from OpenD via `trader.data.fetcher` into a CSV cache (`data/raw/<CODE>_<KTYPE>.csv`); it needs a running OpenD, so `model-train.yml` still fails on GitHub runners at that step.
 - Research lives in `src/trader/research/` (labels, purged walk-forward, IC/deflated Sharpe scoring, grid search). Run `python -m trader.research.grid_search --spec config/research.example.yaml` (`--synthetic` to try it without data, `--dry-run` to list trials); results go to `data/research/<run>/` (git-ignored).
+- Monte Carlo voting plans: `trader.research.monte_carlo` (randomised `VotingEnsemble`, path simulation, bracket levels) and `trader.research.plan_backtest` (walk-forward execution on real highs/lows; CLI `backtest` / `plan` with `config/montecarlo.example.yaml`). Research only: plans are not wired into order flow.
 
 ## Agents, skills, roadmap
 

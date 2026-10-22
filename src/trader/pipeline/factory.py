@@ -17,6 +17,7 @@ from trader.execution.order_manager import OrderManager
 from trader.model.base import ISignalModel
 from trader.model.ensemble import EnsembleSignalModel
 from trader.model.mean_reversion import MeanReversionModel
+from trader.model.tabular import ESTIMATORS as TABULAR_ESTIMATORS
 from trader.pipeline.audit_stage import AuditStage
 from trader.pipeline.data_stage import DataStage
 from trader.pipeline.execution_stage import ExecutionStage
@@ -106,7 +107,7 @@ class DefaultPipelineFactory(IPipelineFactory):
             "gradient_boosting": self._create_gradient_boosting_model,
             **{
                 name: functools.partial(self._create_tabular_model, name)
-                for name in ("lightgbm", "linear", "sklearn_gbm", "tabular")
+                for name in (*TABULAR_ESTIMATORS, "tabular")
             },
         }
 
@@ -124,7 +125,7 @@ class DefaultPipelineFactory(IPipelineFactory):
         Supports model types:
         - "mean_reversion": Enhanced mean reversion with momentum confirmation
         - "ensemble": Weighted ensemble of mean reversion models
-        - "gradient_boosting", "lightgbm", "linear", "sklearn_gbm", "tabular": fitted artifacts
+        - "gradient_boosting", "tabular" and every ``TabularModel`` estimator: fitted artifacts
           loaded from ``model.path``; startup fails if the artifact is missing
         """
         model_cfg = self._config.model if self._config else None

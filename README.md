@@ -91,6 +91,21 @@ and `model.path` to the artifact. Startup fails if the file is missing or the mo
 the live `DataStage` does not compute. Treat synthetic or in-sample numbers as plumbing checks,
 not evidence of an edge.
 
+### Monte Carlo voting plans (buy, take-profit and stop prices)
+
+```bash
+PYTHONPATH=src python -m trader.research.plan_backtest backtest --spec config/montecarlo.example.yaml
+PYTHONPATH=src python -m trader.research.plan_backtest plan --spec config/montecarlo.example.yaml
+```
+
+Many randomised models (random estimator, hyperparameters, feature subset and bootstrap of
+training dates) vote on the direction of the next N bars. If a side gets enough votes, its
+median prediction drives simulated price paths, which set a limit entry, a take-profit and a stop
+with stated fill, target and stop probabilities. `backtest` runs this walk-forward and executes
+the plans on real bar highs and lows net of costs. It also reports `vote_calibration.csv`, which
+shows whether bigger majorities are actually right more often. `plan` prints today's plan per
+symbol. Plans are research output; nothing places orders.
+
 GitHub Actions: run `Model Train` workflow manually (needs OpenD reachable from the runner).
 
 ## Paper trading

@@ -1,4 +1,7 @@
-"""Tabular ML signal models: LightGBM, ridge/logistic and sklearn histogram GBM behind one wrapper.
+"""Tabular ML signal models behind one wrapper.
+
+Estimators: LightGBM, ridge/logistic, elastic net, sklearn histogram GBM, random forest, extra
+trees, a small MLP and k-nearest neighbours.
 
 ``TabularModel`` trains on a feature frame and either a regression target (forward return) or a
 classification target in {-1, 0, 1} (triple barrier). ``score`` returns a signed number per row
@@ -55,10 +58,79 @@ def _sklearn_gbm(task: Task, params: dict[str, Any]) -> Any:
     return HistGradientBoostingClassifier(**merged)
 
 
+def _random_forest(task: Task, params: dict[str, Any]) -> Any:
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
+    merged = {"n_estimators": 300, "min_samples_leaf": 50, "random_state": 42, "n_jobs": 1}
+    merged |= params
+    if task == "regression":
+        return RandomForestRegressor(**merged)
+    return RandomForestClassifier(**merged)
+
+
+def _extra_trees(task: Task, params: dict[str, Any]) -> Any:
+    from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
+
+    merged = {"n_estimators": 300, "min_samples_leaf": 50, "random_state": 42, "n_jobs": 1}
+    merged |= params
+    return ExtraTreesRegressor(**merged) if task == "regression" else ExtraTreesClassifier(**merged)
+
+
+def _mlp(task: Task, params: dict[str, Any]) -> Any:
+    from sklearn.neural_network import MLPClassifier, MLPRegressor
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    merged: dict[str, Any] = {
+        "hidden_layer_sizes": (32, 16),
+        "alpha": 1e-3,
+        "early_stopping": True,
+        "max_iter": 300,
+        "random_state": 42,
+    }
+    merged |= params
+    if isinstance(merged["hidden_layer_sizes"], list):
+        merged["hidden_layer_sizes"] = tuple(merged["hidden_layer_sizes"])
+    estimator = MLPRegressor(**merged) if task == "regression" else MLPClassifier(**merged)
+    return make_pipeline(StandardScaler(), estimator)
+
+
+def _knn(task: Task, params: dict[str, Any]) -> Any:
+    from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    merged = {"n_neighbors": 100, "weights": "distance"} | params
+    estimator = (
+        KNeighborsRegressor(**merged) if task == "regression" else KNeighborsClassifier(**merged)
+    )
+    return make_pipeline(StandardScaler(), estimator)
+
+
+def _elastic_net(task: Task, params: dict[str, Any]) -> Any:
+    from sklearn.linear_model import ElasticNet, LogisticRegression
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    alpha = float(params.get("alpha", 0.01))
+    l1_ratio = float(params.get("l1_ratio", 0.5))
+    if task == "regression":
+        return make_pipeline(StandardScaler(), ElasticNet(alpha=alpha, l1_ratio=l1_ratio))
+    logistic = LogisticRegression(
+        penalty="elasticnet", solver="saga", C=1.0 / alpha, l1_ratio=l1_ratio, max_iter=2000
+    )
+    return make_pipeline(StandardScaler(), logistic)
+
+
 ESTIMATORS: Final[dict[str, EstimatorFactory]] = {
     "lightgbm": _lightgbm,
     "linear": _linear,
     "sklearn_gbm": _sklearn_gbm,
+    "random_forest": _random_forest,
+    "extra_trees": _extra_trees,
+    "mlp": _mlp,
+    "knn": _knn,
+    "elastic_net": _elastic_net,
 }
 
 
