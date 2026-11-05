@@ -21,6 +21,9 @@ import numpy as np
 import pandas as pd
 
 from trader.data import indicators
+from trader.data.technical import TECHNICAL_GROUPS
+from trader.patterns.candlesticks import detect_candlestick_patterns
+from trader.patterns.chart import chart_pattern_frame
 from trader.utils.maths import mean, std_dev, z_score
 
 # Fewer points than this and the window is too thin for any live feature.
@@ -350,6 +353,15 @@ def _calendar(bars: pd.DataFrame, spec: FeatureSpec) -> pd.DataFrame:
     )
 
 
+def _candle_patterns(bars: pd.DataFrame, spec: FeatureSpec) -> pd.DataFrame:
+    return detect_candlestick_patterns(bars).add_prefix("cdl_")
+
+
+def _chart_patterns(bars: pd.DataFrame, spec: FeatureSpec) -> pd.DataFrame:
+    _require(bars, ["high", "low"], "chart_patterns")
+    return chart_pattern_frame(bars)
+
+
 FEATURE_GROUPS: Final[dict[str, Callable[[pd.DataFrame, FeatureSpec], pd.DataFrame]]] = {
     "momentum": _momentum,
     "reversal": _reversal,
@@ -364,6 +376,9 @@ FEATURE_GROUPS: Final[dict[str, Callable[[pd.DataFrame, FeatureSpec], pd.DataFra
     "regime": _regime,
     "calendar": _calendar,
     "live": _live,
+    **TECHNICAL_GROUPS,
+    "candle_patterns": _candle_patterns,
+    "chart_patterns": _chart_patterns,
 }
 
 # Groups computed across symbols after the per-symbol groups (see ``research.dataset``).

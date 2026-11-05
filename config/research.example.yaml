@@ -15,6 +15,10 @@ features:
   # Research feature set (cannot run live yet: DataStage only computes the `live` group).
   - groups: [momentum, reversal, trend, oscillators, volatility, volume]
     windows: [5, 20, 60]
+  # Wider indicator and pattern set (uncomment to add it to the grid; doubles the trial count).
+  # - groups: [momentum, trend_ext, momentum_ext, volatility_ext, volume_ext, moving_averages,
+  #            support_resistance, candle_patterns, chart_patterns]
+  #   windows: [5, 20, 60]
   # The live DataStage features; a winner here can be deployed with model.type = its estimator.
   - groups: [live]
     live_window: 120

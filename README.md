@@ -106,6 +106,30 @@ the plans on real bar highs and lows net of costs. It also reports `vote_calibra
 shows whether bigger majorities are actually right more often. `plan` prints today's plan per
 symbol. Plans are research output; nothing places orders.
 
+### Price patterns (candlesticks, chart patterns and a neural recognizer)
+
+```bash
+PYTHONPATH=src python -m trader.patterns train --symbols HK.00700,HK.09988   # writes data/models/pattern_recognizer.pt
+PYTHONPATH=src python -m trader.patterns scan --symbol HK.00700              # patterns in the recent bars
+PYTHONPATH=src python -m trader.patterns stats --symbols HK.00700,HK.09988 --horizon 10
+#    add --synthetic to any command to try it without downloaded data
+```
+
+- 51 candlestick patterns (doji, hammer, engulfing, harami, morning/evening star, three white
+  soldiers, three methods and more) are rule-based, because a candlestick pattern is a
+  definition.
+- 25 chart patterns (double/triple top and bottom, head and shoulders, triangles, wedges,
+  channels, rectangles, broadening, flags, pennants, cup and handle, rounding and V turns) are
+  found two ways: explainable rules on ATR-scaled swing pivots, and a 1-D CNN trained on
+  synthetic examples plus real windows labelled by the rules. Both report each pattern only from
+  the bar where it became visible, so they can be used as features without look-ahead.
+- `stats` shows the forward return after each pattern, signed by its usual direction. Check it
+  before trusting any pattern: recognising a shape is not the same as predicting a move.
+
+Feature groups `candle_patterns` and `chart_patterns` expose the detectors to the grid search
+and the Monte Carlo planner, next to the indicator groups `moving_averages`, `momentum_ext`,
+`trend_ext`, `volatility_ext`, `volume_ext` and `support_resistance`.
+
 GitHub Actions: run `Model Train` workflow manually (needs OpenD reachable from the runner).
 
 ## Paper trading

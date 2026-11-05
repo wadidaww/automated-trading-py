@@ -75,7 +75,11 @@ Stages chain via typed dataclasses; each stage implements `IStage[InputT, Output
 
 ## Features (`src/trader/data/features.py`)
 
-`window_features(prices, previous)` computes the live `DataStage` features; `live_feature_frame(close, window)` replays it over bar history for training. `build_features(bars, FeatureSpec)` builds the vectorised research groups: `momentum`, `reversal`, `trend`, `oscillators`, `volatility`, `volume` and `live`.
+`window_features(prices, previous)` computes the live `DataStage` features; `live_feature_frame(close, window)` replays it over bar history for training. `build_features(bars, FeatureSpec)` builds the vectorised research groups: `momentum`, `reversal`, `trend`, `oscillators`, `volatility`, `volume`, `candles`, `channels`, `money_flow`, `stats`, `regime`, `calendar`, `live`, the extended indicator groups from `data/technical.py` (`moving_averages`, `momentum_ext`, `trend_ext`, `volatility_ext`, `volume_ext`, `support_resistance`), and the pattern groups `candle_patterns` and `chart_patterns`. `research.dataset` adds the cross-sectional `market` group.
+
+## Patterns (`src/trader/patterns/`)
+
+`candlesticks.detect_candlestick_patterns(bars)` returns one column per pattern in `CANDLESTICK_PATTERNS` (+1 bullish or present, -1 bearish). `chart.detect_chart_patterns(bars, ChartSettings)` returns `ChartPattern`s (name, direction, start, end, `detected_at`, breakout, target, confidence) from swing pivots and a flag/pennant scan; `chart_pattern_frame` turns them into per-bar features. `recognizer.PatternRecognizer` is a 1-D CNN over resampled OHLC windows with `fit`, `predict_proba`, `classify`, `scan`, `save` and `load`; `weak_labels` turns rule detections into real training windows. `stats.pattern_outcomes` reports forward returns per pattern. CLI: `python -m trader.patterns train|scan|stats`.
 
 ## Research (`src/trader/research/`)
 
