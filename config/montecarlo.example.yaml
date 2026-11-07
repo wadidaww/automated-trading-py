@@ -1,0 +1,76 @@
+# Monte Carlo voting plans:
+#   PYTHONPATH=src python -m trader.research.plan_backtest backtest --spec config/montecarlo.example.yaml
+#   PYTHONPATH=src python -m trader.research.plan_backtest plan --spec config/montecarlo.example.yaml
+# Add --synthetic to either command to try it without downloaded history.
+#
+# Each of `n_members` models draws an estimator and hyperparameters from `pool`, a random
+# `feature_fraction` of the features and a block bootstrap of the training dates. Members vote
+# on the direction of the next `label.horizon` bars; a side needs `vote_threshold` of the votes.
+# The winners' median prediction drives `n_paths` simulated price paths, which set the plan:
+#   entry       limit reached within `entry_window` bars with probability `entry_fill_prob`
+#   take_profit level the paths reach with probability `take_profit_prob`
+#   stop_loss   `stop_prob` quantile of the path lows
+# A plan whose simulated expected net return is <= `min_expected_value` becomes HOLD.
+
+data:
+  source: csv
+  symbols: [HK.00700, HK.09988, HK.03690, HK.01810, HK.00388]
+  ktype: K_DAY
+  cache_dir: data/raw
+  start: 2016-01-01
+
+features:
+  groups: [momentum, reversal, trend, oscillators, volatility, volume, candles, channels,
+           money_flow, stats, regime, market]
+  windows: [5, 20, 60]
+
+label:
+  kind: forward_return
+  horizon: 5
+  vol_scale: true
+  vol_window: 20
+
+ensemble:
+  n_members: 30
+  feature_fraction: 0.6
+  sample_fraction: 0.8
+  block: 20                # bootstrap block length in trading days
+  vote_margin: 0.0         # |prediction| at or below this abstains
+  vote_threshold: 0.6      # share of members needed to act
+  seed: 0
+  pool:
+    - estimator: lightgbm
+      params: {n_estimators: [100, 300], num_leaves: [7, 15], learning_rate: [0.03],
+               min_child_samples: [50], subsample: [0.8], subsample_freq: [1]}
+    - estimator: linear
+      params: {alpha: [1.0, 10.0, 100.0]}
+    - estimator: elastic_net
+      params: {alpha: [0.01, 0.1], l1_ratio: [0.2, 0.8]}
+    - estimator: extra_trees
+      params: {min_samples_leaf: [50, 100], n_estimators: [200]}
+    - estimator: random_forest
+      params: {min_samples_leaf: [50, 100], n_estimators: [200], max_features: [0.3]}
+    - estimator: mlp
+      params: {hidden_layer_sizes: [[32, 16], [16]], alpha: [0.001, 0.01]}
+
+simulation:
+  n_paths: 1000
+  entry_window: 2
+  entry_fill_prob: 0.5
+  take_profit_prob: 0.35
+  stop_prob: 0.1
+  min_expected_value: 0.0
+  seed: 0
+
+validation:
+  n_splits: 5
+  embargo: 5
+  min_train: 504
+  expanding: true
+
+execution:
+  cost_bps: 25             # per side; HK stamp duty alone is 10 bps
+  long_only: true          # SELL plans are reported but not traded
+  periods_per_year: 252
+
+output_dir: data/research
