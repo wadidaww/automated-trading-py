@@ -6,6 +6,7 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data/models:/app/data/models
+      - ./data/state:/app/data/state  # daily signal job: sessions already acted on
       - ./logs:/app/logs
     depends_on:
       - mock-opend

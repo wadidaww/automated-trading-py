@@ -140,6 +140,41 @@ PYTHONPATH=src python -m trader --mode paper --duration 300
 
 Requires Futu OpenD gateway at `127.0.0.1:11111`. Without it, the client falls back to paper mode automatically.
 
+## Daily signal orders (cron)
+
+```bash
+# Preview: signals, sizing and risk checks for every configured symbol, no orders sent
+PYTHONPATH=src python -m trader --daily-signals --dry-run --config config/config.staging.yaml
+# Paper (SIMULATE) orders
+PYTHONPATH=src python -m trader --daily-signals --mode paper --config config/config.staging.yaml
+```
+
+Run once per trading day during the continuous session; `deploy/cron/daily-signals.cron` runs it
+Mon-Fri at 09:35 HKT. For each symbol the job downloads daily bars from OpenD, keeps only
+completed sessions (today's forming bar is dropped), replays the closes through `DataStage` and
+the configured model, and if the signal is BUY or SELL above `model.confidence_threshold` sends a
+LIMIT order at the previous session's close through the normal risk and execution stages.
+HOLD or low-confidence signals place nothing; a SELL needs a sellable position unless
+`risk.allow_short` is set. The risk price band rejects the order when today's price has gapped
+more than `risk.price_band_pct` from the close.
+
+Safety: it skips non-trading days (OpenD calendar plus `session.holidays`), refuses bars that do
+not end on the previous trading session, sends nothing outside the HK continuous session (except
+with `--dry-run`), and records each acted-on session in `daily.state_file`
+(`data/state/daily_signals.json`) so a repeated run never sends a second order. Orders are left
+working on exit. Live trading uses the same opt-in gate as the streaming pipeline. Supported
+markets: HK and crypto (`CC`); other markets are refused until their session hours are added.
+The JSON summary goes to stdout; the exit code is 1 if any symbol errored.
+
+Optional config block (defaults shown):
+
+```yaml
+daily:
+  history_days: 400        # calendar days of bars; must cover pipeline.data_window_size sessions
+  ktype: "K_DAY"
+  state_file: "data/state/daily_signals.json"
+```
+
 ## Production deployment
 
 Use `deploy-prod.yml` workflow with environment approval to build and deploy the Docker image.
