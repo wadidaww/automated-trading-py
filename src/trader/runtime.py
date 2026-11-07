@@ -11,6 +11,9 @@ from trader.api.broker import BrokerClient
 from trader.api.factory import create_client
 from trader.api.quote_handler import QuoteHandler
 from trader.api.quote_poller import QuotePoller
+from trader.data.fetcher import HistoricalDataFetcher
+from trader.jobs.daily_signals import DailyDecision, DailySignalJob, FutuTradingCalendar
+from trader.pipeline.factory import DefaultPipelineFactory
 from trader.pipeline.pipeline import TradingPipeline
 from trader.risk.kill_switch import KillSwitch
 from trader.utils.config import AppConfig, load_config
@@ -187,3 +190,38 @@ async def run(mode: str, duration: int, config_path: str) -> None:
         await _run_pipeline(client, config, duration)
 
     logger.info("pipeline_shutdown_complete")
+
+
+async def run_daily(mode: str, config_path: str, *, dry_run: bool = False) -> list[DailyDecision]:
+    """Run the daily signal job once (see ``trader.jobs.daily_signals``).
+
+    The live opt-in gate is the same as for the streaming pipeline. A dry run never unlocks
+    trading and never sends an order. Working orders are left in place on exit.
+
+    Args:
+        mode: Trading mode (paper or live).
+        config_path: Path to configuration file.
+        dry_run: Stop after the risk stage and report the orders that would be sent.
+
+    Returns:
+        One decision per configured symbol.
+    """
+    config = load_config(config_path)
+    logger.info("config_loaded", config_path=config_path, mode=mode, dry_run=dry_run)
+    check_live_opt_in(config, mode)
+
+    async with build_client(config, mode) as client:
+        if mode == "live" and not dry_run:
+            await prepare_live(client, config)
+        job = DailySignalJob(
+            config,
+            DefaultPipelineFactory(config=config, client=client),
+            bars=HistoricalDataFetcher(
+                host=config.opend.host, port=config.opend.port, ktype=config.daily.ktype
+            ),
+            calendar=FutuTradingCalendar(host=config.opend.host, port=config.opend.port),
+            dry_run=dry_run,
+        )
+        decisions = await job.run()
+    logger.info("daily_signals_complete", symbols=len(decisions), dry_run=dry_run)
+    return decisions

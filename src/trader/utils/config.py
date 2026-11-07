@@ -149,6 +149,16 @@ class SessionSettings(BaseModel):
     reconcile_interval_s: int = 60
 
 
+class DailySignalSettings(BaseModel):
+    """Scheduled daily job: signals from the previous session's close become limit orders."""
+
+    # Calendar days of daily bars to download; must cover ``pipeline.data_window_size`` sessions.
+    history_days: int = Field(default=400, gt=0)
+    ktype: str = "K_DAY"
+    # Last session acted on per symbol, so a repeated cron run never sends a second order.
+    state_file: str = "data/state/daily_signals.json"
+
+
 class ModelSettings(BaseModel):
     """Model config."""
 
@@ -193,6 +203,7 @@ class AppConfig(BaseSettings):
     risk: RiskSettings = Field(default_factory=RiskSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     session: SessionSettings = Field(default_factory=SessionSettings)
+    daily: DailySignalSettings = Field(default_factory=DailySignalSettings)
     model_config = SettingsConfigDict(env_file=".env")
 
 
