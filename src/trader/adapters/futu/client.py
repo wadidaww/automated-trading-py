@@ -1,4 +1,9 @@
-"""Futu OpenD client: connection lifecycle, rate limiting and typed trade/quote calls."""
+"""Futu OpenD client: connection lifecycle, rate limiting and typed trade/quote calls.
+
+Market-specific behaviour (which contexts to open, order parameters, instrument rules, query
+checks) lives in a :class:`~trader.adapters.futu.markets.FutuMarket` passed to the client, so
+adding a market means writing a new ``FutuMarket``, not overriding client internals.
+"""
 
 from __future__ import annotations
 
@@ -30,12 +35,14 @@ from trader.adapters.futu.parsers import (
     stock_info_from_snapshot,
 )
 from trader.adapters.futu.rate_limit import TokenBucket
+from trader.adapters.futu.markets import FutuMarket
 from trader.adapters.sim.simulator import PaperSimulator
 from trader.adapters.futu.payload import Payload
 from trader.core.orders import Side
 from trader.utils.dataframe import first_value
 
 __all__ = [
+    "EquityMarket",
     "FutuClient",
     "OrderResponse",
     "OrderStatusResponse",
@@ -68,6 +75,54 @@ def _resolve_order_price(resolved_order_type: str, price: float | None) -> float
     return price
 
 
+class EquityMarket:
+    """Futu equities (HK/US/...) on ``OpenSecTradeContext``: whole shares, board lots."""
+
+    def __init__(self, trade_market: str = TrdMarket.HK) -> None:
+        self.trade_market = trade_market
+
+    def new_quote_ctx(self, host: str, port: int) -> OpenQuoteContext:
+        """Plain quote context."""
+        return OpenQuoteContext(host=host, port=port)
+
+    def new_trade_ctx(self, host: str, port: int) -> OpenSecTradeContext:
+        """Securities trade context filtered to this market."""
+        return OpenSecTradeContext(filter_trdmarket=self.trade_market, host=host, port=port)
+
+    def order_params(self, order_type: str, qty: float) -> tuple[str, float, dict[str, Any]]:
+        """Resolve broker order type, quantity and extra ``place_order`` kwargs.
+
+        Equities trade whole shares: a fractional quantity is refused here, not rounded.
+
+        Raises:
+            ValueError: When ``qty`` is not a whole number of shares.
+        """
+        if not float(qty).is_integer():
+            raise ValueError(f"equity quantity must be a whole number of shares: {qty}")
+        return ORDER_TYPES.get(order_type, OrderType.NORMAL), int(qty), {}
+
+    def with_instrument_rules(
+        self, info: StockInfoResponse, *, simulated: bool
+    ) -> StockInfoResponse:
+        """The snapshot already carries the equity lot size and tick."""
+        return info
+
+    def prepare_query(self, method: str, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Equity queries need no extra arguments."""
+        return kwargs
+
+    def check_query(self, method: str, frame: pd.DataFrame) -> None:
+        """Equity query responses need no extra checks."""
+
+    def simulator_only(self, trd_env: str) -> bool:
+        """Equities can use Futu SIMULATE, so OpenD is always tried first."""
+        return False
+
+    def make_simulator(self) -> PaperSimulator:
+        """Default equity paper simulator."""
+        return PaperSimulator()
+
+
 class FutuClient:
     """Async client for quote/trade operations with reconnect and heartbeat."""
 
@@ -84,12 +139,14 @@ class FutuClient:
         acc_id: int | None = None,
         allow_paper_fallback: bool = True,
         connection_timeout_s: float = 0.2,
+        market: FutuMarket | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.max_retries = max_retries
         self.heartbeat_interval_s = heartbeat_interval_s
-        self.trade_market = trade_market
+        self.market: FutuMarket = market if market is not None else EquityMarket(trade_market)
+        self.trade_market = self.market.trade_market
         self.trd_env = trd_env
         self.acc_id = acc_id
         self.allow_paper_fallback = allow_paper_fallback
@@ -99,13 +156,29 @@ class FutuClient:
         self._heartbeat_task: asyncio.Task[None] | None = None
         self._bucket = TokenBucket(rate_limit_requests, rate_limit_window_s)
         self._quote_ctx: OpenQuoteContext | None = None
-        self._trade_ctx: OpenSecTradeContext | None = None
-        self._simulator = PaperSimulator()
+        self._trade_ctx: Any = None
+        # Only a client that may run on the simulator gets one, so a live client cannot reach it.
+        self._simulator: PaperSimulator | None = (
+            self.market.make_simulator()
+            if allow_paper_fallback or self.market.simulator_only(trd_env)
+            else None
+        )
 
     @property
     def is_connected(self) -> bool:
         """Check if client is connected to OpenD gateway."""
         return self._connected or self._paper_fallback
+
+    @property
+    def _paper(self) -> PaperSimulator:
+        """The paper simulator; only reached after a permitted fallback.
+
+        Raises:
+            RuntimeError: When this client was built without a simulator.
+        """
+        if self._simulator is None:
+            raise RuntimeError("paper simulator requested on a client that may not fall back")
+        return self._simulator
 
     def _resolve_acc_id(self) -> int:
         """Resolve account ID.
@@ -139,6 +212,9 @@ class FutuClient:
             ConnectionError: When the gateway is unreachable and paper fallback
                 is disabled.
         """
+        if self.market.simulator_only(self.trd_env):
+            self._paper_fallback = True
+            return
         if self.allow_paper_fallback and not await self.probe_gateway():
             self._paper_fallback = True
             return
@@ -207,30 +283,12 @@ class FutuClient:
         return False
 
     def _new_quote_ctx(self) -> OpenQuoteContext:
-        """Open the quote context (hook: crypto adds a security firm)."""
-        return OpenQuoteContext(host=self.host, port=self.port)
+        """Open the quote context for this client's market."""
+        return self.market.new_quote_ctx(self.host, self.port)
 
-    def _new_trade_ctx(self) -> OpenSecTradeContext:
-        """Open the trade context for this client's market (hook: crypto has its own context)."""
-        return OpenSecTradeContext(
-            filter_trdmarket=self.trade_market, host=self.host, port=self.port
-        )
-
-    def _order_params(self, order_type: str, qty: float) -> tuple[str, float, dict[str, Any]]:
-        """Resolve broker order type, quantity and extra ``place_order`` kwargs (hook).
-
-        Equities trade whole shares: a fractional quantity is refused here, not rounded.
-
-        Raises:
-            ValueError: When ``qty`` is not a whole number of shares.
-        """
-        if not float(qty).is_integer():
-            raise ValueError(f"equity quantity must be a whole number of shares: {qty}")
-        return ORDER_TYPES.get(order_type, OrderType.NORMAL), int(qty), {}
-
-    def _with_instrument_rules(self, info: StockInfoResponse) -> StockInfoResponse:
-        """Hook to attach market-specific instrument metadata to a snapshot."""
-        return info
+    def _new_trade_ctx(self) -> Any:
+        """Open the trade context for this client's market."""
+        return self.market.new_trade_ctx(self.host, self.port)
 
     async def close(self) -> None:
         """Close API contexts."""
@@ -271,14 +329,16 @@ class FutuClient:
         trade_ctx = self._trade_ctx
         if self._paper_fallback or trade_ctx is None:
             return None
-        return Payload.df_payload(
+        frame = Payload.df_payload(
             await asyncio.to_thread(
                 getattr(trade_ctx, method),
                 trd_env=self.trd_env,
                 acc_id=self._resolve_acc_id(),
-                **kwargs,
+                **self.market.prepare_query(method, kwargs),
             )
         )
+        self.market.check_query(method, frame)
+        return frame
 
     async def get_quote(self, symbol: str) -> QuoteResponse:
         """Get the last price for a symbol."""
@@ -289,11 +349,13 @@ class FutuClient:
         """Get stock snapshot with valuation metrics."""
         await self._ready()
         if self._paper_fallback or self._quote_ctx is None:
-            return self._with_instrument_rules(self._simulator.stock_info(symbol))
+            return self.market.with_instrument_rules(self._paper.stock_info(symbol), simulated=True)
         payload_df = Payload.df_payload(
             await asyncio.to_thread(self._quote_ctx.get_market_snapshot, [symbol])
         )
-        return self._with_instrument_rules(stock_info_from_snapshot(payload_df, symbol))
+        return self.market.with_instrument_rules(
+            stock_info_from_snapshot(payload_df, symbol), simulated=False
+        )
 
     @validate_call
     async def place_order(
@@ -316,11 +378,11 @@ class FutuClient:
             remark: Client order id echoed back by Futu, used for reconciliation.
         """
         await self._ready()
-        resolved_order_type, send_qty, extra = self._order_params(order_type, qty)
+        resolved_order_type, send_qty, extra = self.market.order_params(order_type, qty)
         resolved_price = _resolve_order_price(resolved_order_type, price)
         trade_ctx = self._trade_ctx
         if self._paper_fallback or trade_ctx is None:
-            return self._simulator.order_ack(symbol, side, qty, resolved_price, remark)
+            return self._paper.order_ack(symbol, side, qty, resolved_price, remark)
         payload_df = Payload.df_payload(
             await asyncio.to_thread(
                 trade_ctx.place_order,
@@ -356,7 +418,7 @@ class FutuClient:
         await self._ready()
         payload_df = await self._trade_query("order_list_query")
         if payload_df is None:
-            return self._simulator.orders(symbol)
+            return self._paper.orders(symbol)
         if symbol is not None and "code" in payload_df.columns:
             payload_df = payload_df[payload_df["code"] == symbol]
         return [order_status_from_row(row) for _, row in payload_df.iterrows()]
@@ -383,7 +445,7 @@ class FutuClient:
         account_id = self._resolve_acc_id()
         payload_df = await self._trade_query("accinfo_query")
         if payload_df is None:
-            return self._simulator.portfolio(account_id)
+            return self._paper.portfolio(account_id)
         if payload_df.empty:
             raise RuntimeError("empty account info response")
         return portfolio_from_row(payload_df.iloc[0], account_id)

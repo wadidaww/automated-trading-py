@@ -71,15 +71,25 @@ realized volatility, z-score, and close lags. Live per-quote features come from
 
 `KellyCriterion` (`src/trader/risk/kelly_criterion.py`) computes fractional Kelly position sizing; `RiskStage` scales it by signal confidence (≥0.85 → full, ≥0.70 → 60%, below → 30%).
 
-## API client
+## Broker port and adapters
 
-`FutuClient` (`src/trader/api/client.py`) wraps Futu OpenD with:
+Risk, execution, the pipeline and the runtime depend on the `BrokerClient` protocol
+(`src/trader/ports/broker.py`) and its typed responses (`src/trader/ports/models.py`), never on
+a concrete client. `src/trader/adapters/factory.py` picks the adapter for `trading.market`.
+
+`FutuClient` (`src/trader/adapters/futu/client.py`) is the Futu adapter. Everything that differs
+between markets lives in a `FutuMarket` profile (`src/trader/adapters/futu/markets.py`):
+`EquityMarket` (whole shares, `OpenSecTradeContext`) and `CryptoMarket`
+(`src/trader/adapters/futu/crypto.py`: decimal quantities, GTC/IOC, account-currency checks,
+simulator-only outside REAL). A new market is a new profile, not a client subclass.
+
+`FutuClient` wraps Futu OpenD with:
 
 - Async context manager lifecycle
 - Bounded reconnect with exponential backoff + jitter
 - Token-bucket rate limiting
 - Heartbeat loop
-- Automatic paper-mode fallback when gateway is unavailable (simulated quotes, orders, and portfolio)
+- Paper-mode fallback when the gateway is unavailable (`PaperSimulator`, `src/trader/adapters/sim/`). Only a client allowed to fall back is given a simulator, so a live client cannot reach one.
 
 ## Data flow
 

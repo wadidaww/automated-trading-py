@@ -42,7 +42,7 @@ MIN_SDK_MESSAGE = (
     "run: pip install --upgrade 'futu-api>=10.5.6508'"
 )
 
-__all__ = ["CryptoSdkError", "FutuCryptoClient"]
+__all__ = ["CryptoMarket", "CryptoSdkError", "FutuCryptoClient"]
 
 
 class CryptoSdkError(Exception):
@@ -52,57 +52,48 @@ class CryptoSdkError(Exception):
     """
 
 
-class FutuCryptoClient(FutuClient):
-    """Futu OpenD client for crypto pairs such as ``CC.BTCUSD``."""
+class CryptoMarket:
+    """Futu crypto pairs such as ``CC.BTCUSD`` on ``OpenCryptoTradeContext``."""
 
-    def __init__(self, settings: CryptoSettings, **kwargs: Any) -> None:
-        kwargs.setdefault("trd_env", TrdEnv.SIMULATE)
-        # A REAL crypto run must never quietly degrade into the simulator.
-        if kwargs["trd_env"] == TrdEnv.REAL:
-            kwargs["allow_paper_fallback"] = False
-        super().__init__(trade_market=CRYPTO_MARKET, **kwargs)
+    trade_market = CRYPTO_MARKET
+
+    def __init__(self, settings: CryptoSettings) -> None:
         self.settings = settings
-        self._simulator = PaperSimulator(
-            base_price=settings.paper_base_price,
-            volatility=settings.paper_base_price * _PAPER_VOLATILITY_PCT,
-            starting_cash=settings.paper_cash,
+
+    def simulator_only(self, trd_env: str) -> bool:
+        """Every non-REAL run trades on the local simulator: Futu has no crypto SIMULATE."""
+        return trd_env != TrdEnv.REAL
+
+    def make_simulator(self) -> PaperSimulator:
+        """Simulator around the configured paper price, without board lots."""
+        return PaperSimulator(
+            base_price=self.settings.paper_base_price,
+            volatility=self.settings.paper_base_price * _PAPER_VOLATILITY_PCT,
+            starting_cash=self.settings.paper_cash,
             lot_size=None,
         )
 
-    @property
-    def simulated(self) -> bool:
-        """Whether this client trades on the local simulator (every non-REAL run)."""
-        return self.trd_env != TrdEnv.REAL
-
-    async def connect(self) -> None:
-        """Connect to OpenD for REAL trading; non-REAL runs stay on the simulator.
-
-        Raises:
-            ConnectionError: When REAL and the gateway is unreachable.
-        """
-        if self.simulated:
-            self._paper_fallback = True
-            return
-        await super().connect()
-
-    async def _trade_query(self, method: str, **kwargs: Any) -> pd.DataFrame | None:
-        """Query in the configured account currency and refuse a response in any other.
+    def prepare_query(self, method: str, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Query account and positions in the configured account currency.
 
         Futu defaults ``accinfo_query`` to HKD and positions to USD; mixing them would scale the
         portfolio value (and every concentration check) by the FX rate.
+        """
+        if method in _CURRENCY_QUERIES:
+            return {"currency": self.settings.currency, **kwargs}
+        return kwargs
+
+    def check_query(self, method: str, frame: pd.DataFrame) -> None:
+        """Refuse a response reported in any currency but the configured one.
 
         Raises:
             RuntimeError: When a returned row reports a different currency.
         """
         currency = self.settings.currency
-        if method in _CURRENCY_QUERIES:
-            kwargs.setdefault("currency", currency)
-        frame = await super()._trade_query(method, **kwargs)
-        if frame is not None and "currency" in frame.columns:
+        if "currency" in frame.columns:
             other = {str(c) for c in frame["currency"].dropna()} - {currency}
             if other:
                 raise RuntimeError(f"{method} returned {sorted(other)}, expected {currency}")
-        return frame
 
     def _security_firm(self) -> str:
         """The configured brokerage as a futu ``SecurityFirm`` value.
@@ -118,16 +109,14 @@ class FutuCryptoClient(FutuClient):
             )
         return str(getattr(SecurityFirm, name))
 
-    def _new_quote_ctx(self) -> OpenQuoteContext:
+    def new_quote_ctx(self, host: str, port: int) -> OpenQuoteContext:
         """Quote context bound to the crypto brokerage."""
         try:
-            return OpenQuoteContext(
-                host=self.host, port=self.port, security_firm=self._security_firm()
-            )
+            return OpenQuoteContext(host=host, port=port, security_firm=self._security_firm())
         except TypeError as exc:  # futu-api < 10: no security_firm parameter
             raise CryptoSdkError(MIN_SDK_MESSAGE) from exc
 
-    def _new_trade_ctx(self) -> Any:
+    def new_trade_ctx(self, host: str, port: int) -> Any:
         """Crypto trade context bound to the crypto brokerage.
 
         Raises:
@@ -135,11 +124,9 @@ class FutuCryptoClient(FutuClient):
         """
         if OpenCryptoTradeContext is None:
             raise CryptoSdkError(MIN_SDK_MESSAGE)
-        return OpenCryptoTradeContext(
-            host=self.host, port=self.port, security_firm=self._security_firm()
-        )
+        return OpenCryptoTradeContext(host=host, port=port, security_firm=self._security_firm())
 
-    def _order_params(self, order_type: str, qty: float) -> tuple[str, float, dict[str, Any]]:
+    def order_params(self, order_type: str, qty: float) -> tuple[str, float, dict[str, Any]]:
         """LIMIT → NORMAL/GTC, MARKET → MARKET/IOC; quantity must reach ``min_qty``.
 
         Raises:
@@ -151,14 +138,16 @@ class FutuCryptoClient(FutuClient):
             return OrderType.MARKET, float(qty), {"time_in_force": _IOC}
         return OrderType.NORMAL, float(qty), {"time_in_force": _GTC}
 
-    def _with_instrument_rules(self, info: StockInfoResponse) -> StockInfoResponse:
+    def with_instrument_rules(
+        self, info: StockInfoResponse, *, simulated: bool
+    ) -> StockInfoResponse:
         """Attach the crypto tick, step and minimum; crypto has no board lot.
 
         The live tick comes from the broker snapshot (``price_spread``) and is left unset when
         the broker gives none, so the risk stage rejects instead of guessing. The simulator has
         no snapshot, so paper runs use the configured tick.
         """
-        tick = self.settings.paper_price_tick if self._paper_fallback else info.tick_size
+        tick = self.settings.paper_price_tick if simulated else info.tick_size
         return info.model_copy(
             update={
                 "lot_size": None,
@@ -167,3 +156,20 @@ class FutuCryptoClient(FutuClient):
                 "min_qty": self.settings.min_qty,
             }
         )
+
+
+class FutuCryptoClient(FutuClient):
+    """``FutuClient`` on a :class:`CryptoMarket`; a REAL run never falls back to paper."""
+
+    def __init__(self, settings: CryptoSettings, **kwargs: Any) -> None:
+        kwargs.setdefault("trd_env", TrdEnv.SIMULATE)
+        # A REAL crypto run must never quietly degrade into the simulator.
+        if kwargs["trd_env"] == TrdEnv.REAL:
+            kwargs["allow_paper_fallback"] = False
+        super().__init__(market=CryptoMarket(settings), **kwargs)
+        self.settings = settings
+
+    @property
+    def simulated(self) -> bool:
+        """Whether this client trades on the local simulator (every non-REAL run)."""
+        return self.market.simulator_only(self.trd_env)

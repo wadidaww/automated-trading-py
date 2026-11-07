@@ -1,6 +1,6 @@
 # API Reference
 
-## `FutuClient` (`src/trader/api/client.py`)
+## `FutuClient` (`src/trader/adapters/futu/client.py`)
 
 Async client for Futu OpenD quote/trade operations.
 
@@ -67,7 +67,7 @@ Stages chain via typed dataclasses; each stage implements `IStage[InputT, Output
 
 | Type | Module | Fields |
 |------|--------|--------|
-| `QuoteEvent` | `trader.api.quote_handler` | symbol, price, timestamp |
+| `QuoteEvent` | `trader.marketdata.quote_handler` | symbol, price, timestamp |
 | `FeatureWindow` | `trader.pipeline.data_stage` | symbol, price, z_score, momentum, trend_strength, volatility, rsi, bb_position, price_acceleration |
 | `TradeSignal` | `trader.pipeline.signal_stage` | symbol, signal, confidence, price |
 | `ApprovedOrder` | `trader.pipeline.risk_stage` | symbol, qty, side, price |

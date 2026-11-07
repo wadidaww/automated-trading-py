@@ -5,7 +5,7 @@ from futu import TrdSide
 from futu.common.constant import ContextStatus
 
 from trader.adapters.futu import client as client_module
-from trader.adapters.futu.client import FutuClient
+from trader.adapters.futu.client import EquityMarket, FutuClient
 from helpers import FakeQuoteContext, FakeTradeContext
 
 
@@ -132,3 +132,16 @@ async def test_real_trading_never_defaults_the_account(monkeypatch: pytest.Monke
     async with FutuClient(allow_paper_fallback=False, max_retries=1, trd_env="REAL") as client:
         with pytest.raises(ValueError, match="acc_id"):
             await client.place_order("HK.00700", 100, "BUY", price=300.0, order_type="LIMIT")
+
+
+def test_client_without_fallback_has_no_simulator() -> None:
+    client = FutuClient(allow_paper_fallback=False, trd_env="REAL", acc_id=1)
+    assert client._simulator is None
+    with pytest.raises(RuntimeError, match="may not fall back"):
+        _ = client._paper
+
+
+def test_equity_market_is_the_default_profile() -> None:
+    client = FutuClient(trade_market="US")
+    assert isinstance(client.market, EquityMarket)
+    assert client.trade_market == "US"
