@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from trader.api.client import OrderStatusResponse, PortfolioResponse, PositionResponse
+from trader.ports.models import OrderStatusResponse, PortfolioResponse, PositionResponse
 from trader.core.clock import SimulatedClock
 from trader.model.base import Signal
 from trader.pipeline.risk_stage import PreTradeLimits, RiskStage

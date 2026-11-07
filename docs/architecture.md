@@ -69,17 +69,33 @@ realized volatility, z-score, and close lags. Live per-quote features come from
 6. Concentration limit (% of portfolio)
 7. Latency budget exceeded
 
-`KellyCriterion` (`src/trader/risk/kelly_criterion.py`) computes fractional Kelly position sizing; `RiskStage` scales it by signal confidence (≥0.85 → full, ≥0.70 → 60%, below → 30%).
+`KellyCriterion` (`src/trader/risk/kelly_criterion.py`) computes fractional Kelly position sizing; `PreTradeRisk` scales it by signal confidence (≥0.85 → full, ≥0.70 → 60%, below → 30%).
 
-## API client
+`PreTradeRisk` (`src/trader/risk/pre_trade.py`) is the pre-trade risk service: kill switch, live portfolio state
+(`src/trader/risk/portfolio_state.py`, working BUY orders included), lot/step/tick rules, price band, sizing, the
+`RiskEngine` gates and the order-rate throttle. It returns an `OrderIntent` or a `Rejection(reason)`. `RiskStage`
+is only the pipeline adapter: it drops HOLD signals, calls `PreTradeRisk.check` and counts reject reasons. Code
+outside the pipeline (scheduled jobs) should call `PreTradeRisk` directly rather than re-implement any check.
 
-`FutuClient` (`src/trader/api/client.py`) wraps Futu OpenD with:
+## Broker port and adapters
+
+Risk, execution, the pipeline and the runtime depend on the `BrokerClient` protocol
+(`src/trader/ports/broker.py`) and its typed responses (`src/trader/ports/models.py`), never on
+a concrete client. `src/trader/adapters/factory.py` picks the adapter for `trading.market`.
+
+`FutuClient` (`src/trader/adapters/futu/client.py`) is the Futu adapter. Everything that differs
+between markets lives in a `FutuMarket` profile (`src/trader/adapters/futu/markets.py`):
+`EquityMarket` (whole shares, `OpenSecTradeContext`) and `CryptoMarket`
+(`src/trader/adapters/futu/crypto.py`: decimal quantities, GTC/IOC, account-currency checks,
+simulator-only outside REAL). A new market is a new profile, not a client subclass.
+
+`FutuClient` wraps Futu OpenD with:
 
 - Async context manager lifecycle
 - Bounded reconnect with exponential backoff + jitter
 - Token-bucket rate limiting
 - Heartbeat loop
-- Automatic paper-mode fallback when gateway is unavailable (simulated quotes, orders, and portfolio)
+- Paper-mode fallback when the gateway is unavailable (`PaperSimulator`, `src/trader/adapters/sim/`). Only a client allowed to fall back is given a simulator, so a live client cannot reach one.
 
 ## Data flow
 

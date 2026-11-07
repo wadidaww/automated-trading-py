@@ -7,8 +7,8 @@ from contextlib import suppress
 
 from prometheus_client import Counter, Gauge
 
-from trader.api.broker import BrokerClient
-from trader.api.quote_handler import QuoteEvent
+from trader.ports.broker import BrokerClient
+from trader.marketdata.quote_handler import QuoteEvent
 from trader.pipeline.factory import DefaultPipelineFactory, IPipelineFactory
 from trader.utils.config import AppConfig
 from trader.utils.logger import get_logger

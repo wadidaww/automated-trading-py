@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from trader.api.broker import BrokerClient
+from trader.ports.broker import BrokerClient
 from trader.core.orders import (
     ManagedOrder,
     OrderIntent,

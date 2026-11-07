@@ -2,12 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from trader.api.client import (
-    FutuClient,
-    OrderResponse,
-    PortfolioConditionResponse,
-    StockInfoResponse,
-)
+from trader.adapters.futu.client import FutuClient
+from trader.ports.models import OrderResponse, PortfolioConditionResponse, StockInfoResponse
 from trader.execution.trading_service import TradingService
 from helpers import make_order, make_portfolio_condition, make_position, make_stock_info
 

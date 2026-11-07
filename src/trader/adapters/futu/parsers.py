@@ -6,16 +6,16 @@ from typing import Any
 
 import pandas as pd
 
-from trader.api.models import (
+from trader.ports.models import (
     OrderStatusResponse,
     PortfolioResponse,
     PositionResponse,
     StockInfoResponse,
 )
-from trader.misc.types.futu import TradeSide
+from trader.core.orders import Side
 from trader.utils.dataframe import first_value
 
-TRADE_SIDES: dict[str, TradeSide] = {"BUY": "BUY", "SELL": "SELL"}
+TRADE_SIDES: dict[str, Side] = {"BUY": "BUY", "SELL": "SELL"}
 SYMBOL_COLUMNS = ("code", "stock_code")
 PORTFOLIO_AMOUNT_FIELDS: dict[str, tuple[str, ...]] = {
     "total_assets": ("total_assets", "power", "net_assets"),

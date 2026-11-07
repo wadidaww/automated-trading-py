@@ -10,9 +10,9 @@ from collections.abc import Callable
 
 from futu import TrdEnv
 
-from trader.api.broker import BrokerClient
-from trader.api.client import FutuClient
-from trader.api.crypto_client import FutuCryptoClient
+from trader.ports.broker import BrokerClient
+from trader.adapters.futu.client import FutuClient
+from trader.adapters.futu.crypto import FutuCryptoClient
 from trader.core.symbols import CRYPTO_MARKET
 from trader.utils.config import AppConfig
 

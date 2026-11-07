@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from trader.api.broker import BrokerClient
-from trader.api.client import (
+from trader.ports.broker import BrokerClient
+from trader.ports.models import (
     OrderResponse,
     PortfolioConditionResponse,
     PositionResponse,

@@ -39,7 +39,7 @@ reported as `skip` when their prerequisite failed.
 ## Crypto trading (Futu `CC.*` spot)
 
 Crypto runs through the same pipeline; `trading.market: "CC"` selects `FutuCryptoClient`
-(`src/trader/api/factory.py`). Start from `config/config.crypto.dev.yaml`.
+(`src/trader/adapters/factory.py`). Start from `config/config.crypto.dev.yaml`.
 
 - **Paper:** Futu has no SIMULATE for crypto, so `--mode paper` uses the local simulator
   (`trading.crypto.paper_*`). It never sends crypto orders to OpenD.

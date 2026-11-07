@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from trader.api.client import FutuClient
-from trader.api.quote_handler import QuoteEvent
-from trader.api.simulator import PaperSimulator
+from trader.adapters.futu.client import FutuClient
+from trader.marketdata.quote_handler import QuoteEvent
+from trader.adapters.sim.simulator import PaperSimulator
 from trader.pipeline.pipeline import TradingPipeline
 
 # Oscillate +/-0.5% around the base price to fill the rolling window, then dip 1.5%:
