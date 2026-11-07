@@ -36,4 +36,4 @@ description: Step-by-step recipe for adding a new signal model/strategy to this 
 7. **Backtest.** Run it through the event-driven backtester with the cost model, and report
    using the `backtest-validation` output template. No live or paper enablement without net-of-cost
    evidence.
-8. **Validate:** `ruff check src/ tests/ && ruff format --check . && mypy src && PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-fail-under=64`.
+8. **Validate:** `ruff check src/ tests/ && ruff format --check . && mypy src && PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-fail-under=75`.

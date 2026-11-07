@@ -1,0 +1,19 @@
+# Daily signal job: signals from the previous session's close become LIMIT orders.
+# Install on the host that runs OpenD:  crontab deploy/cron/daily-signals.cron
+# (edit APP_DIR first). Times are UTC; HK has no daylight saving, so 01:35 UTC = 09:35 HKT,
+# five minutes into the continuous session. The job itself skips holidays (OpenD trading-day
+# calendar plus config session.holidays), refuses stale bars, and never sends a second order
+# for a session it already acted on, so re-runs are safe.
+#
+# Paper (SIMULATE) is the default. Preview without sending anything: add --dry-run.
+# Live needs --mode live, trading.trd_env: REAL, TRADER_LIVE_CONFIRM=1 and FUTU_TRADE_PWD_MD5;
+# do not enable it here until a paper run has been reviewed.
+
+SHELL=/bin/bash
+APP_DIR=/opt/automated-trading-py
+
+# Mon-Fri 01:35 UTC (09:35 HKT): paper orders for config.staging.yaml symbols.
+35 1 * * 1-5 cd "$APP_DIR" && set -a && . ./.env && set +a && PYTHONPATH=src python -m trader --daily-signals --mode paper --config config/config.staging.yaml >> logs/daily-signals.log 2>&1
+
+# Docker alternative (the image's entrypoint is `python -m trader`):
+# 35 1 * * 1-5 cd "$APP_DIR" && docker compose run --rm trader --daily-signals --mode paper --config config/config.staging.yaml >> logs/daily-signals.log 2>&1

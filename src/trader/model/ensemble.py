@@ -154,6 +154,9 @@ class EnsembleSignalModel(ISignalModel):
     ) -> tuple[Signal, float]:
         """Pick the strongest signal, letting a marginal HOLD lose to the best alternative."""
         best_signal = max(raw_votes, key=lambda signal: raw_votes[signal])
+        if raw_votes[best_signal] <= 0:
+            # Every member voted with zero confidence: no information, so no trade.
+            return Signal.HOLD, 0.0
         best_score = normalized[best_signal]
         challengers = {
             signal: score for signal, score in normalized.items() if signal != Signal.HOLD
