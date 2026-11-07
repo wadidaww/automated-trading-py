@@ -11,7 +11,7 @@ from pathlib import Path
 
 from trader.evaluation.backtester import Backtester
 from trader.evaluation.metrics import Trade
-from trader.utils.config import load_config
+from trader.config import load_config
 
 
 def _load_trades(path: Path) -> list[Trade]:

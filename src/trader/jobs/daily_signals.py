@@ -36,7 +36,7 @@ from trader.core.symbols import CRYPTO_MARKET, market_of
 from trader.model.base import Signal
 from trader.pipeline.data_stage import FeatureWindow
 from trader.pipeline.factory import IPipelineFactory
-from trader.utils.config import AppConfig
+from trader.config import AppConfig
 from trader.utils.logger import get_logger
 
 logger = get_logger("daily_signals")

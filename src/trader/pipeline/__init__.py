@@ -1,6 +1,6 @@
-"""Subpackage."""
+"""Pipeline stages, the stage-factory interface and the pipeline runner."""
 
 from trader.pipeline.base import IStage
-from trader.pipeline.factory import DefaultPipelineFactory, IPipelineFactory
+from trader.pipeline.factory import IPipelineFactory
 
-__all__ = ["DefaultPipelineFactory", "IPipelineFactory", "IStage"]
+__all__ = ["IPipelineFactory", "IStage"]

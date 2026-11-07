@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from trader.runtime import LiveModeRefusedError, check_live_opt_in
+from trader.app.runtime import LiveModeRefusedError, check_live_opt_in
 from trader.risk.kill_switch import KillSwitch
 from trader.risk.throttle import OrderRateThrottle
-from trader.utils.config import RiskSettings, load_config
+from trader.config import RiskSettings, load_config
 
 
 def test_kill_switch_is_latched_and_fires_callbacks_once() -> None:

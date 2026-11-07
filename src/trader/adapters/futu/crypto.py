@@ -26,7 +26,7 @@ from trader.adapters.futu.client import FutuClient
 from trader.ports.models import StockInfoResponse
 from trader.adapters.sim.simulator import PaperSimulator
 from trader.core.symbols import CRYPTO_MARKET
-from trader.utils.config import CRYPTO_SECURITY_FIRMS, CryptoSettings
+from trader.config import CRYPTO_SECURITY_FIRMS, CryptoSettings
 
 # Paper prices wander about 0.2% per step around the base price.
 _PAPER_VOLATILITY_PCT = 0.002

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from trader.adapters.futu.client import FutuClient
 from trader.marketdata.quote_handler import QuoteEvent
 from trader.adapters.sim.simulator import PaperSimulator
+from trader.app.bootstrap import DefaultPipelineFactory
 from trader.pipeline.pipeline import TradingPipeline
 
 # Oscillate +/-0.5% around the base price to fill the rolling window, then dip 1.5%:
@@ -37,7 +38,9 @@ def _static_price_client(price: float) -> FutuClient:
 async def run_pipeline(symbol: str, price: float, *, queue_maxsize: int = 64) -> TradingPipeline:
     """Run a warm-up series plus a mean-reversion dip through the pipeline."""
     dip_price = price * (1 - _DIP_PCT)
-    pipeline = TradingPipeline(client=_static_price_client(dip_price), queue_maxsize=queue_maxsize)
+    pipeline = TradingPipeline(
+        DefaultPipelineFactory(client=_static_price_client(dip_price)), queue_maxsize=queue_maxsize
+    )
     await pipeline.start()
     prices = [price * (1 + pct) for pct in _WARMUP_OFFSETS_PCT] + [dip_price]
     for px in prices:

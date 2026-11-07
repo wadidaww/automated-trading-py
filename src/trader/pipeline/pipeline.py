@@ -7,10 +7,8 @@ from contextlib import suppress
 
 from prometheus_client import Counter, Gauge
 
-from trader.ports.broker import BrokerClient
 from trader.marketdata.quote_handler import QuoteEvent
-from trader.pipeline.factory import DefaultPipelineFactory, IPipelineFactory
-from trader.utils.config import AppConfig
+from trader.pipeline.factory import IPipelineFactory
 from trader.utils.logger import get_logger
 
 logger = get_logger("pipeline")
@@ -24,33 +22,23 @@ THROUGHPUT = Counter(
 class TradingPipeline:
     """Event-driven async pipeline with start/stop/drain lifecycle.
 
-    Supports both config-driven and backward-compatible construction.
-    When config/client are provided without a factory, a DefaultPipelineFactory
-    is created from them. When nothing is provided, defaults are used.
+    Stages come from an ``IPipelineFactory``; ``trader.app.bootstrap.DefaultPipelineFactory``
+    builds them from config and a broker client.
     """
 
     def __init__(
         self,
-        factory: IPipelineFactory | None = None,
-        config: AppConfig | None = None,
-        client: BrokerClient | None = None,
+        factory: IPipelineFactory,
         queue_maxsize: int = 1000,
     ) -> None:
         self.input_queue: asyncio.Queue[QuoteEvent] = asyncio.Queue(maxsize=queue_maxsize)
         self._tasks: list[asyncio.Task[None]] = []
 
-        if factory is not None:
-            _factory = factory
-        elif config is not None or client is not None:
-            _factory = DefaultPipelineFactory(config=config, client=client)
-        else:
-            _factory = DefaultPipelineFactory()
-
-        self.data_stage = _factory.create_data_stage()
-        self.signal_stage = _factory.create_signal_stage()
-        self.risk_stage = _factory.create_risk_stage()
-        self.execution_stage = _factory.create_execution_stage()
-        self.audit_stage = _factory.create_audit_stage()
+        self.data_stage = factory.create_data_stage()
+        self.signal_stage = factory.create_signal_stage()
+        self.risk_stage = factory.create_risk_stage()
+        self.execution_stage = factory.create_execution_stage()
+        self.audit_stage = factory.create_audit_stage()
 
         logger.info("pipeline_initialized")
 

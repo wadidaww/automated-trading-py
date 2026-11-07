@@ -8,15 +8,15 @@ import os
 import signal
 
 from trader.adapters.factory import create_client
+from trader.app.bootstrap import DefaultPipelineFactory
 from trader.data.fetcher import HistoricalDataFetcher
 from trader.jobs.daily_signals import DailyDecision, DailySignalJob, FutuTradingCalendar
 from trader.marketdata.quote_handler import QuoteHandler
 from trader.marketdata.quote_poller import QuotePoller
-from trader.pipeline.factory import DefaultPipelineFactory
 from trader.ports.broker import BrokerClient
 from trader.pipeline.pipeline import TradingPipeline
 from trader.risk.kill_switch import KillSwitch
-from trader.utils.config import AppConfig, load_config
+from trader.config import AppConfig, load_config
 from trader.utils.logger import get_logger
 
 logger = get_logger("main")
@@ -90,7 +90,7 @@ async def _run_pipeline(client: BrokerClient, config: AppConfig, duration: int) 
         config: Application configuration.
         duration: Runtime duration in seconds.
     """
-    pipeline = TradingPipeline(config=config, client=client)
+    pipeline = TradingPipeline(DefaultPipelineFactory(config=config, client=client))
     stop = asyncio.Event()
     kill_switch = pipeline.risk_stage.kill_switch
     loop = asyncio.get_running_loop()
