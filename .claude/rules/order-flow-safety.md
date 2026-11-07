@@ -5,24 +5,25 @@ paths:
   - "src/trader/pipeline/risk_stage.py"
   - "src/trader/pipeline/execution_stage.py"
   - "src/trader/pipeline/factory.py"
-  - "src/trader/api/**"
+  - "src/trader/app/bootstrap.py"
+  - "src/trader/ports/**"
+  - "src/trader/adapters/**"
   - "src/trader/core/orders.py"
   - "src/trader/core/market_rules.py"
-  - "src/trader/core/gateway.py"
-  - "src/trader/runtime.py"
-  - "src/trader/__main__.py"
+  - "src/trader/app/runtime.py"
+  - "src/trader/app/cli.py"
 ---
 
 # Order-flow safety
 
 These files decide whether an order reaches Futu. Load the `live-trading-safety` skill before
-editing, and `futu-opend` for anything under `src/trader/api/`.
+editing, and `futu-opend` for anything under `src/trader/adapters/`.
 
 - Every new branch fails closed: missing or stale quote, position, portfolio, lot size or limit
   data rejects the order with a reason code. No default quantity, price or portfolio value.
 - `Signal.HOLD` never becomes an order. Map `BUY` and `SELL` explicitly.
 - Exposure checks count working (open) orders as well as fills.
-- Do not loosen `check_live_opt_in` in `src/trader/runtime.py`. Live needs `--mode live`,
+- Do not loosen `check_live_opt_in` in `src/trader/app/runtime.py`. Live needs `--mode live`,
   `trd_env: REAL`, `TRADER_LIVE_CONFIRM=1` and a numeric account id, and a REAL config without
   `--mode live` is refused too.
 - Live mode never falls back to `PaperSimulator`. An unreachable OpenD in live mode is an error.

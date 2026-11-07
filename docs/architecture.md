@@ -16,6 +16,33 @@ flowchart TD
   A --> M[(Prometheus)]
 ```
 
+## Package layout
+
+```
+src/trader/
+  core/        domain types: orders, symbols, market rules, events, clock (no futu/pandas/pydantic)
+  ports/       BrokerClient protocol and typed broker responses
+  adapters/    futu/ (equity + crypto clients, FutuMarket profiles), sim/ (paper), factory.py
+  marketdata/  quote poller and quote events
+  risk/        PreTradeRisk, portfolio state, RiskEngine, Kelly, kill switch, throttle
+  execution/   OrderManager
+  data/        live + research features, indicators, history fetcher
+  model/       signal models and the model registry
+  pipeline/    stages, IPipelineFactory, TradingPipeline
+  jobs/        scheduled jobs (daily signals)
+  research/    offline research (grid search, Monte Carlo plans); patterns/ pattern detectors
+  app/         cli, runtime (live opt-in, shutdown), health, bootstrap (composition root)
+  config.py    AppConfig schema and loader
+```
+
+Dependency rules are checked in CI by `lint-imports` (contracts in `pyproject.toml`):
+
+- `core` imports no other `trader` package and no futu, pandas or pydantic.
+- Only `app` may import `adapters` (or `app`). Everything else talks to the broker through `ports`.
+- `ports` never imports futu.
+- The live path (`app`, `pipeline`, `risk`, `execution`, `marketdata`, `ports`, `adapters`)
+  never imports `research`.
+
 ## Pipeline stages
 
 | Stage | Input | Output | Responsibility |
@@ -32,13 +59,18 @@ throughput per stage plus queue depth.
 
 ## Factory pattern
 
-`DefaultPipelineFactory` (`src/trader/pipeline/factory.py`) builds all stages from `AppConfig` and `FutuClient`. Implement `IPipelineFactory` to create custom stage configurations.
+`TradingPipeline` takes an `IPipelineFactory` (`src/trader/pipeline/factory.py`). The concrete
+`DefaultPipelineFactory` (`src/trader/app/bootstrap.py`) is the composition root: it builds every
+stage from `AppConfig` and a `BrokerClient`, creating the broker adapter itself only when none is
+given. Implement `IPipelineFactory` to create custom stage configurations.
 
-Model selection is a registry (`_model_builders`) keyed by `model.type` from config:
+Model selection is a registry (`src/trader/model/registry.py`: `build_model`, `register_model`)
+keyed by `model.type` from config:
 
-- `mean_reversion` (default) — `MeanReversionModel`
+- `mean_reversion` (default, and the fallback for unknown types) — `MeanReversionModel`
 - `ensemble` — weighted `EnsembleSignalModel` of three mean-reversion variants
-- `gradient_boosting` — lazy scikit-learn import, falls back to `mean_reversion` when unavailable
+- `gradient_boosting`, `tabular` and every `TabularModel` estimator — fitted artifacts loaded from
+  `model.path`; startup fails if the file is missing or the model needs non-live features
 
 ## Models
 

@@ -12,8 +12,8 @@ or PR named) and read enough surrounding code to judge each change.
 1. **Order safety.** Can this change send an order that could not be sent before, bypass a risk
    check, loosen a limit, weaken `check_live_opt_in`, add a simulator fallback in live mode, or
    auto-reset the kill switch? If the diff touches `src/trader/risk`, `src/trader/execution`,
-   `src/trader/api`, `pipeline/risk_stage.py`, `pipeline/execution_stage.py`, `runtime.py` or
-   `config/*.yaml` limits, say that a `risk-manager` review is required.
+   `src/trader/adapters`, `src/trader/ports`, `pipeline/risk_stage.py`,
+   `pipeline/execution_stage.py`, `src/trader/app/` or `config/*.yaml` limits, say that a `risk-manager` review is required.
 2. **Correctness.** Wrong signs and units (minor vs major units, HKD vs USD, per-tick vs
    annualised), off-by-one windows, unhandled `None`, exceptions swallowed into a default value,
    crypto vs equity code paths mixed.

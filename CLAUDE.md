@@ -16,7 +16,7 @@ touch matching files.
   password hash stay out of commands, logs, tests and commit messages.
 - **Never weaken a safety control to make a test pass**: the live opt-in gate
   (`trader.runtime.check_live_opt_in`), risk limits, throttle, kill switch, fail-closed paths, or
-  the `max_orders_per_30s < 15` validator in `trader.utils.config`.
+  the `max_orders_per_30s < 15` validator in `trader.config`.
 - **Never fabricate results.** No data means no metrics; say what could not be run.
 - Do not merge PRs. Open them and let the user merge.
 

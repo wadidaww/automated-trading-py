@@ -7,7 +7,7 @@ description: Run the trader end to end in paper mode or run the --health-check, 
 
 Paper only. `--mode live` is blocked by the guard hook and is never something an agent runs.
 
-Both commands import `futu` (via `trader.api.factory`), so they need `futu-api` installed
+Both commands import `futu` (via `trader.adapters.factory`), so they need `futu-api` installed
 (`poetry install` does it). Neither needs a running OpenD. If `futu` is missing, say the smoke
 test could not run and rely on `tests/integration/test_pipeline_integration.py`, which drives the
 pipeline with fakes.

@@ -1,7 +1,7 @@
 ---
 paths:
   - "config/**"
-  - "src/trader/utils/config.py"
+  - "src/trader/config.py"
   - ".env.example"
 ---
 
@@ -9,7 +9,7 @@ paths:
 
 Load the `config-change` skill before editing.
 
-- Every YAML under `config/` is validated by `AppConfig` in `src/trader/utils/config.py`. A new
+- Every YAML under `config/` is validated by `AppConfig` in `src/trader/config.py`. A new
   field goes into the pydantic model first (with a safe default or `Field(...)`), then into every
   config that needs it, then into `tests/integration/test_config_loading.py`.
 - `trd_env` stays `SIMULATE` in every committed config. Changing it to `REAL` is the user's call,

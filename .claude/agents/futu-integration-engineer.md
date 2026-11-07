@@ -1,6 +1,6 @@
 ---
 name: futu-integration-engineer
-description: Owns the Futu OpenD / futu-api integration (src/trader/api, src/trader/execution) — quote subscriptions and push handlers, order placement/modify/cancel, order & deal push, portfolio/position/account queries, historical klines, reconnection, rate limits, TrdEnv SIMULATE vs REAL. Use for any change that talks to OpenD.
+description: Owns the Futu OpenD / futu-api integration (src/trader/adapters, src/trader/ports, src/trader/execution) — quote subscriptions and push handlers, order placement/modify/cancel, order & deal push, portfolio/position/account queries, historical klines, reconnection, rate limits, TrdEnv SIMULATE vs REAL. Use for any change that talks to OpenD.
 tools: Read, Edit, Write, Grep, Glob, Bash, WebFetch, WebSearch
 model: inherit
 ---

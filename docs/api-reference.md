@@ -101,16 +101,12 @@ Abstract interface for signal models. Implement `predict(features)`, `fit(X, y)`
 
 Implementations: `MeanReversionModel`, `EnsembleSignalModel`, `GradientBoostingModel`, `TabularModel` (LightGBM, ridge/logistic, sklearn histogram GBM), `TransformerPriceModel`.
 
-Selected via `model.type` in config: `mean_reversion` (default), `ensemble`, `gradient_boosting` (falls back to `mean_reversion` if scikit-learn is unavailable).
+Selected via `model.type` in config through the registry in `src/trader/model/registry.py` (`build_model`, `register_model`): `mean_reversion` (default, also used for unknown types), `ensemble`, `gradient_boosting`, `tabular` and every `TabularModel` estimator. ML types load a fitted artifact from `model.path` and fail at startup if it is missing or needs non-live features.
 
 ## `OrderManager` (`src/trader/execution/order_manager.py`)
 
 In-memory idempotent order management with state machine (PENDING → SUBMITTED → FILLED/CANCELLED).
 
-## `TradingService` (`src/trader/execution/trading_service.py`)
-
-Higher-level trading workflow: stock inspection, target evaluation, buy/sell order coordination.
-
 ## Configuration
 
-`AppConfig` (`src/trader/utils/config.py`) — Pydantic `BaseSettings` model with nested sections: `OpendConfig`, `TradingSettings`, `ModelSettings`, `PipelineSettings`, `LoggingSettings`, `MetricsSettings`.
+`AppConfig` (`src/trader/config.py`) — Pydantic `BaseSettings` model with nested sections: `OpendConfig`, `TradingSettings`, `ModelSettings`, `PipelineSettings`, `LoggingSettings`, `MetricsSettings`.
