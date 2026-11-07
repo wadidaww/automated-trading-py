@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from trader.core.orders import Side
-from trader.adapters.futu.client import (
+from trader.ports.models import (
     OrderResponse,
     PortfolioConditionResponse,
     PortfolioResponse,

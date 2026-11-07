@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import dataclass
 
 from trader.ports.broker import BrokerClient
-from trader.adapters.futu.client import (
+from trader.ports.models import (
     OrderResponse,
     PortfolioConditionResponse,
     PositionResponse,

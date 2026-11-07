@@ -69,7 +69,13 @@ realized volatility, z-score, and close lags. Live per-quote features come from
 6. Concentration limit (% of portfolio)
 7. Latency budget exceeded
 
-`KellyCriterion` (`src/trader/risk/kelly_criterion.py`) computes fractional Kelly position sizing; `RiskStage` scales it by signal confidence (≥0.85 → full, ≥0.70 → 60%, below → 30%).
+`KellyCriterion` (`src/trader/risk/kelly_criterion.py`) computes fractional Kelly position sizing; `PreTradeRisk` scales it by signal confidence (≥0.85 → full, ≥0.70 → 60%, below → 30%).
+
+`PreTradeRisk` (`src/trader/risk/pre_trade.py`) is the pre-trade risk service: kill switch, live portfolio state
+(`src/trader/risk/portfolio_state.py`, working BUY orders included), lot/step/tick rules, price band, sizing, the
+`RiskEngine` gates and the order-rate throttle. It returns an `OrderIntent` or a `Rejection(reason)`. `RiskStage`
+is only the pipeline adapter: it drops HOLD signals, calls `PreTradeRisk.check` and counts reject reasons. Code
+outside the pipeline (scheduled jobs) should call `PreTradeRisk` directly rather than re-implement any check.
 
 ## Broker port and adapters
 
