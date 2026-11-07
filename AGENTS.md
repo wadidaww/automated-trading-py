@@ -9,10 +9,10 @@ Python algorithmic trading framework for Futu/Futubull OpenAPI. Event-driven asy
 ruff check src/ tests/
 ruff format --check .
 mypy src
-PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail-under=64
+PYTHONPATH=src pytest tests/unit tests/integration --cov=src/trader --cov-report=xml --cov-fail-under=75
 ```
 
-- CI runs **only** `tests/unit` and `tests/integration`; `tests/e2e/` is excluded (it instantiates the full pipeline). Keep the coverage gate at 64% in mind when adding code.
+- CI runs **only** `tests/unit` and `tests/integration`; `tests/e2e/` is excluded (it instantiates the full pipeline). Keep the coverage gate (75%, set in `ci.yml`) in mind when adding code.
 - All `trader.*` imports are package-qualified; plain `python -m trader ...`, `python scripts/*.py`, and local `pytest` runs need `PYTHONPATH=src` (CI sets `PYTHONPATH: src`, Dockerfile sets `ENV PYTHONPATH=/app/src`).
 - pytest is configured with `asyncio_mode = "auto"` (no `@pytest.mark.asyncio` needed except in a couple of existing tests); shared `ohlcv_df` fixture lives in `tests/conftest.py`.
 

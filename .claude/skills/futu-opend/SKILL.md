@@ -6,13 +6,16 @@ description: Correct usage of Futu OpenD / futu-api in this repo — symbol form
 # Futu OpenD integration guide
 
 The reference is https://openapi.futunn.com/futu-api-doc/. Limits and enums change between SDK
-versions, so check the docs for anything this page marks *verify*. `futu-api` is **not installed**
-in the dev/CI containers. Code against `trader.api.client.FutuClient` and test with
+versions, so check the docs for anything this page marks *verify*. `futu-api` is installed by Poetry
+in CI, but no OpenD runs there. Code against `trader.api.client.FutuClient` and test with
 `tests/helpers/fakes.py`.
 
 ## Symbols
-Futu codes are `MARKET.CODE`: `HK.00700`, `US.AAPL`, `SH.600519`, `SZ.000001`. `700.HK` is
-**wrong** (current configs use it — fix when touched). Normalize once at config load.
+Futu codes are `MARKET.CODE`: `HK.00700`, `US.AAPL`, `SH.600519`, `SZ.000001`, and crypto pairs
+`CC.BTCUSD` / `CC.ETHUSD`. `trader.core.symbols.normalize_symbol` (run by `TradingSettings` at
+config load) turns `700.HK` into `HK.00700`; use the canonical form everywhere after that.
+Crypto goes through `FutuCryptoClient` (`src/trader/api/crypto_client.py`), has no SIMULATE
+environment, and must never be mixed with equity symbols in one config.
 
 ## Market data: push, don't poll
 ```python
