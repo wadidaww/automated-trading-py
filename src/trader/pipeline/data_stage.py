@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass
 
-from trader.api.quote_handler import QuoteEvent
+from trader.marketdata.quote_handler import QuoteEvent
 from trader.data import indicators
 from trader.pipeline.base import IStage
 from trader.utils.logger import get_logger

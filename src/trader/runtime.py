@@ -7,10 +7,10 @@ import contextlib
 import os
 import signal
 
-from trader.api.broker import BrokerClient
-from trader.api.factory import create_client
-from trader.api.quote_handler import QuoteHandler
-from trader.api.quote_poller import QuotePoller
+from trader.ports.broker import BrokerClient
+from trader.adapters.factory import create_client
+from trader.marketdata.quote_handler import QuoteHandler
+from trader.marketdata.quote_poller import QuotePoller
 from trader.pipeline.pipeline import TradingPipeline
 from trader.risk.kill_switch import KillSwitch
 from trader.utils.config import AppConfig, load_config
@@ -49,7 +49,7 @@ def check_live_opt_in(config: AppConfig, mode: str) -> None:
 
 
 def build_client(config: AppConfig, mode: str) -> BrokerClient:
-    """Build the broker client for ``config.trading.market`` (see ``trader.api.factory``).
+    """Build the broker client for ``config.trading.market`` (see ``trader.adapters.factory``).
 
     Live mode never falls back to the paper simulator: an unreachable gateway is an error.
 

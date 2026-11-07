@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import random
 
-from trader.api.models import (
+from trader.ports.models import (
     OrderResponse,
     OrderStatusResponse,
     PortfolioResponse,
     StockInfoResponse,
 )
-from trader.misc.types.futu import TradeSide
+from trader.core.orders import Side
 
 STARTING_CASH = 1_000_000.0
 BASE_PRICE = 100.0
@@ -59,7 +59,7 @@ class PaperSimulator:
 
     @staticmethod
     def order_ack(
-        symbol: str, side: TradeSide, qty: float, price: float | None, remark: str | None
+        symbol: str, side: Side, qty: float, price: float | None, remark: str | None
     ) -> OrderResponse:
         """Acknowledge an order as SUBMITTED."""
         return OrderResponse(

@@ -7,9 +7,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any, TypedDict
 
-from trader.api.broker import BrokerClient
-from trader.api.client import FutuClient
-from trader.api.factory import create_client
+from trader.ports.broker import BrokerClient
+from trader.adapters.futu.client import FutuClient
+from trader.adapters.factory import create_client
 from trader.execution.order_manager import OrderManager
 from trader.model.base import ISignalModel
 from trader.model.ensemble import EnsembleSignalModel

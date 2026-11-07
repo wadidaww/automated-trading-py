@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from trader.misc.types.futu import TradeSide
-from trader.api.client import (
+from trader.core.orders import Side
+from trader.adapters.futu.client import (
     OrderResponse,
     PortfolioConditionResponse,
     PortfolioResponse,
@@ -81,7 +81,7 @@ def make_portfolio_condition(
 
 def make_order(
     symbol: str,
-    side: TradeSide,
+    side: Side,
     qty: float,
     *,
     order_id: str | None = None,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from trader.api.client import (
+from trader.adapters.futu.client import (
     FutuClient,
     OrderResponse,
     PortfolioConditionResponse,

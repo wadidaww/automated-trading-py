@@ -4,8 +4,8 @@ import pytest
 from futu import TrdSide
 from futu.common.constant import ContextStatus
 
-from trader.api import client as client_module
-from trader.api.client import FutuClient
+from trader.adapters.futu import client as client_module
+from trader.adapters.futu.client import FutuClient
 from helpers import FakeQuoteContext, FakeTradeContext
 
 

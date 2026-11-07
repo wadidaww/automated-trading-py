@@ -11,9 +11,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Final
 
-from trader.api.broker import BrokerClient
-from trader.api.client import find_position_by_symbol
-from trader.api.models import StockInfoResponse
+from trader.ports.broker import BrokerClient
+from trader.adapters.futu.client import find_position_by_symbol
+from trader.ports.models import StockInfoResponse
 from trader.core.clock import Clock, WallClock
 from trader.core.market_rules import (
     round_down_to_lot,

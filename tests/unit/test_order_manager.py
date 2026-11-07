@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from trader.api.client import OrderResponse
+from trader.adapters.futu.client import OrderResponse
 from trader.core.orders import ManagedOrder, OrderIntent, OrderStatus
 from trader.execution.order_manager import DuplicateOrderError, OrderManager, TradingHaltedError
 from trader.risk.kill_switch import KillSwitch

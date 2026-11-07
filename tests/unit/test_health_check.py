@@ -4,7 +4,7 @@ import pytest
 from structlog.testing import capture_logs
 
 import trader.health as cli
-from trader.api.client import FutuClient
+from trader.adapters.futu.client import FutuClient
 from trader.utils.config import AppConfig
 
 

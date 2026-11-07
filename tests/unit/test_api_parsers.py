@@ -3,9 +3,13 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from trader.api.parsers import order_status_from_row, portfolio_from_row, position_from_row
-from trader.api.parsers import stock_info_from_snapshot
-from trader.api.simulator import LOT_SIZE, PaperSimulator
+from trader.adapters.futu.parsers import (
+    order_status_from_row,
+    portfolio_from_row,
+    position_from_row,
+)
+from trader.adapters.futu.parsers import stock_info_from_snapshot
+from trader.adapters.sim.simulator import LOT_SIZE, PaperSimulator
 
 
 def test_snapshot_prefers_last_price_and_falls_back_to_nominal() -> None:

@@ -13,7 +13,7 @@ from futu import OpenQuoteContext, OpenSecTradeContext, OrderType, TrdEnv, TrdMa
 from futu.common.constant import ContextStatus
 from pydantic import Field, validate_call
 
-from trader.api.models import (
+from trader.ports.models import (
     OrderResponse,
     OrderStatusResponse,
     PortfolioConditionResponse,
@@ -23,16 +23,16 @@ from trader.api.models import (
     StockInfoResponse,
     find_position_by_symbol,
 )
-from trader.api.parsers import (
+from trader.adapters.futu.parsers import (
     order_status_from_row,
     portfolio_from_row,
     position_from_row,
     stock_info_from_snapshot,
 )
-from trader.api.rate_limit import TokenBucket
-from trader.api.simulator import PaperSimulator
-from trader.api.typesafe.payload import Payload
-from trader.misc.types.futu import TradeSide
+from trader.adapters.futu.rate_limit import TokenBucket
+from trader.adapters.sim.simulator import PaperSimulator
+from trader.adapters.futu.payload import Payload
+from trader.core.orders import Side
 from trader.utils.dataframe import first_value
 
 __all__ = [
@@ -300,7 +300,7 @@ class FutuClient:
         self,
         symbol: str = SYMBOL_FIELD,
         qty: float = QTY_FIELD,
-        side: TradeSide = SIDE_FIELD,
+        side: Side = SIDE_FIELD,
         order_type: str = ORDER_TYPE_FIELD,
         price: float | None = PRICE_FIELD,
         remark: str | None = REMARK_FIELD,

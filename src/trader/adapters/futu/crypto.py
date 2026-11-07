@@ -22,9 +22,9 @@ try:  # Added in futu-api 10.5.6508; the repo's 9.x pin does not ship it.
 except ImportError:  # pragma: no cover - depends on the installed SDK
     OpenCryptoTradeContext = None  # type: ignore[assignment,misc]
 
-from trader.api.client import FutuClient
-from trader.api.models import StockInfoResponse
-from trader.api.simulator import PaperSimulator
+from trader.adapters.futu.client import FutuClient
+from trader.ports.models import StockInfoResponse
+from trader.adapters.sim.simulator import PaperSimulator
 from trader.core.symbols import CRYPTO_MARKET
 from trader.utils.config import CRYPTO_SECURITY_FIRMS, CryptoSettings
 
