@@ -23,8 +23,8 @@ description: Step-by-step recipe for adding a new signal model/strategy to this 
      `(Signal, confidence)`.
    - `HOLD` means no trade.
    - If confidence feeds sizing, calibrate it.
-4. **Register** the builder in `DefaultPipelineFactory._model_builders`
-   (`src/trader/pipeline/factory.py`). Unfitted ML models must fail at startup, not on every
+4. **Register** the builder in `_BUILDERS` in `src/trader/model/registry.py` (or call
+   `register_model`). Unfitted ML models must fail at startup, not on every
    tick. Load the fitted artifact from `model.path`.
 5. **Config.** Add parameters under `model:` in `AppConfig`, with defaults, to all three
    `config/*.yaml`.

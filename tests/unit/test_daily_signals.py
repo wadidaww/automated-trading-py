@@ -11,15 +11,15 @@ import pandas as pd
 import pytest
 import yaml
 
-import trader.__main__ as cli
-from trader import runtime
-from trader.api.client import FutuClient
-from trader.api.simulator import PaperSimulator
+import trader.app.cli as cli
+from trader.app import runtime
+from trader.adapters.futu.client import FutuClient
+from trader.adapters.sim.simulator import PaperSimulator
 from trader.jobs import daily_signals as ds
 from trader.jobs.daily_signals import DailySignalJob, DailyStateStore, FutuTradingCalendar
 from trader.pipeline.execution_stage import OrderReceipt
-from trader.pipeline.factory import DefaultPipelineFactory
-from trader.utils.config import AppConfig, DailySignalSettings, load_config
+from trader.app.bootstrap import DefaultPipelineFactory
+from trader.config import AppConfig, DailySignalSettings, load_config
 
 SYMBOL = "HK.00700"
 BASE = 300.0

@@ -36,7 +36,7 @@ Fast loop while iterating: `pytest tests/unit/test_<area>.py -q -x` then the ful
 - `ruff format --check` fails: run `ruff format <files you changed>`; do not reformat unrelated
   files.
 - `ruff check`: fix the code. Add a `# noqa: <CODE> - <reason>` only with a reason, as in
-  `src/trader/utils/config.py`.
+  `src/trader/config.py`.
 - `mypy`: fix the types. Do not add `# type: ignore` without an error code and a reason.
 - Coverage under 75%: add tests for the code you added. Never lower the gate or skip tests.
 - Collection errors with `No module named 'futu'` (or `yaml`, `pydantic`) mean the environment

@@ -7,20 +7,21 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trader.api.client import FutuClient
+from trader.adapters.futu.client import FutuClient
 from trader.data.features import LIVE_FEATURES, FeatureSpec
 from trader.data.fetcher import cache_path
 from trader.model.base import Prediction, Signal
 from trader.model.ensemble import EnsembleSignalModel
 from trader.model.mean_reversion import MeanReversionModel
 from trader.model.tabular import TabularModel
+from trader.model.registry import build_model
 from trader.model.trainer import _cli as train_cli
-from trader.pipeline.factory import DefaultPipelineFactory
+from trader.app.bootstrap import DefaultPipelineFactory
 from trader.research.dataset import build_dataset
 from trader.research.grid_search import GridSearch, GridSpec, build_trials, expand, main
 from trader.research.labels import LabelSpec
 from trader.research.synthetic import synthetic_bars
-from trader.utils.config import load_config
+from trader.config import load_config
 
 
 def _xy(task: str) -> tuple[pd.DataFrame, pd.Series]:
@@ -199,7 +200,7 @@ def test_factory_rejects_missing_or_non_live_artifacts(tmp_path) -> None:
     with pytest.raises(ValueError, match="live pipeline does not compute"):
         _factory(tmp_path, "tabular", path).create_signal_stage()
     with pytest.raises(ValueError, match="needs a config"):
-        DefaultPipelineFactory(client=FutuClient())._create_tabular_model("linear")
+        build_model("linear")
 
 
 def test_trainer_cli_trains_from_cache(tmp_path, capsys) -> None:

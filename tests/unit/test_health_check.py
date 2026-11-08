@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 from structlog.testing import capture_logs
 
-import trader.health as cli
-from trader.api.client import FutuClient
-from trader.utils.config import AppConfig
+import trader.app.health as cli
+from trader.adapters.futu.client import FutuClient
+from trader.config import AppConfig
 
 
 def _make_config(account_id: str = "123") -> AppConfig:

@@ -40,6 +40,7 @@ mypy = "^1.9"
 ruff = "^0.4"
 pre-commit = "^3.7"
 types-pyyaml = "^6.0.12.20250516"
+import-linter = "^2.1"
 
 [tool.ruff]
 line-length = 100
@@ -79,3 +80,43 @@ pythonpath = ["tests"]
 [build-system]
 requires = ["poetry-core>=1.9.0"]
 build-backend = "poetry.core.masonry.api"
+
+# Architecture contracts, checked in CI with `lint-imports` (see docs/architecture.md).
+[tool.importlinter]
+root_package = "trader"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "core is the dependency-free domain"
+type = "forbidden"
+source_modules = ["trader.core"]
+forbidden_modules = [
+    "trader.adapters", "trader.app", "trader.config", "trader.data", "trader.evaluation",
+    "trader.execution", "trader.jobs", "trader.marketdata", "trader.model", "trader.patterns",
+    "trader.pipeline", "trader.ports", "trader.research", "trader.risk", "futu", "pandas",
+    "pydantic",
+]
+
+[[tool.importlinter.contracts]]
+name = "only the app layer wires adapters"
+type = "forbidden"
+source_modules = [
+    "trader.core", "trader.ports", "trader.risk", "trader.execution", "trader.pipeline",
+    "trader.marketdata", "trader.jobs", "trader.model", "trader.data", "trader.evaluation",
+]
+forbidden_modules = ["trader.adapters", "trader.app"]
+
+[[tool.importlinter.contracts]]
+name = "ports do not depend on Futu"
+type = "forbidden"
+source_modules = ["trader.ports"]
+forbidden_modules = ["futu"]
+
+[[tool.importlinter.contracts]]
+name = "the live path never imports research code"
+type = "forbidden"
+source_modules = [
+    "trader.app", "trader.pipeline", "trader.risk", "trader.execution", "trader.marketdata",
+    "trader.ports", "trader.adapters",
+]
+forbidden_modules = ["trader.research"]

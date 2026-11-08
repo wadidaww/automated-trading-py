@@ -8,10 +8,10 @@ import pytest
 from futu import OrderType, TrdEnv
 from pydantic import ValidationError
 
-from trader.api import crypto_client as crypto_module
-from trader.api.client import FutuClient, PortfolioResponse
-from trader.api.crypto_client import CryptoSdkError, FutuCryptoClient
-from trader.api.factory import create_client
+from trader.adapters.futu import crypto as crypto_module
+from trader.adapters.futu.client import FutuClient, PortfolioResponse
+from trader.adapters.futu.crypto import CryptoSdkError, FutuCryptoClient
+from trader.adapters.factory import create_client
 from trader.core.clock import SimulatedClock
 from trader.core.market_rules import (
     CryptoSessionCalendar,
@@ -28,9 +28,9 @@ from trader.pipeline.signal_stage import TradeSignal
 from trader.risk.kill_switch import KillSwitch
 from trader.risk.risk_engine import RiskEngine
 from trader.risk.throttle import OrderRateThrottle
-from trader.runtime import build_client, check_live_opt_in, LiveModeRefusedError
+from trader.app.runtime import build_client, check_live_opt_in, LiveModeRefusedError
 from trader.utils.maths import to_minor_units_ceil
-from trader.utils.config import CryptoSettings, TradingSettings, load_config
+from trader.config import CryptoSettings, TradingSettings, load_config
 from helpers import FakeCryptoTradeContext, FakeQuoteContext, make_stock_info
 
 SYMBOL = "CC.ETHUSD"

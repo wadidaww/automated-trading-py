@@ -2,14 +2,14 @@
 
 ``OrderManager``, ``RiskStage``, ``QuotePoller``, the runtime and the health check depend on this
 protocol, not on a concrete client, so a market can be added by registering a new client in
-``trader.api.factory`` without touching them.
+``trader.adapters.factory`` without touching them.
 """
 
 from __future__ import annotations
 
 from typing import Any, Protocol
 
-from trader.api.models import (
+from trader.ports.models import (
     OrderResponse,
     OrderStatusResponse,
     PortfolioConditionResponse,
@@ -18,7 +18,7 @@ from trader.api.models import (
     QuoteResponse,
     StockInfoResponse,
 )
-from trader.misc.types.futu import TradeSide
+from trader.core.orders import Side
 
 
 class BrokerClient(Protocol):
@@ -55,7 +55,7 @@ class BrokerClient(Protocol):
         self,
         symbol: str,
         qty: float,
-        side: TradeSide,
+        side: Side,
         order_type: str = "MARKET",
         price: float | None = None,
         remark: str | None = None,

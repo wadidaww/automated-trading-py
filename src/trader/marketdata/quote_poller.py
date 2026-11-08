@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 
-from trader.api.broker import BrokerClient
-from trader.api.quote_handler import QuoteHandler
+from trader.ports.broker import BrokerClient
+from trader.marketdata.quote_handler import QuoteHandler
 from trader.utils.logger import get_logger
 
 logger = get_logger("quote_poller")

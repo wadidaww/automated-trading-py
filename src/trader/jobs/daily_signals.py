@@ -29,14 +29,14 @@ from typing import Any, Final, Protocol
 
 import pandas as pd
 
-from trader.api.quote_handler import QuoteEvent
+from trader.marketdata.quote_handler import QuoteEvent
 from trader.core.clock import Clock, WallClock
 from trader.core.market_rules import HKT, HKSessionCalendar
 from trader.core.symbols import CRYPTO_MARKET, market_of
 from trader.model.base import Signal
 from trader.pipeline.data_stage import FeatureWindow
 from trader.pipeline.factory import IPipelineFactory
-from trader.utils.config import AppConfig
+from trader.config import AppConfig
 from trader.utils.logger import get_logger
 
 logger = get_logger("daily_signals")

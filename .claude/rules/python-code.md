@@ -19,7 +19,7 @@ paths:
   Name variables with their units (`notional_minor`, `vol_annual`).
 - Strategy and feature code never reads wall-clock time. Use the event timestamp or the clock in
   `trader.core.clock`, so backtest replay is deterministic.
-- Wire new stages and models through `trader.pipeline.factory.DefaultPipelineFactory`, not by
+- Wire new stages and models through `trader.app.bootstrap.DefaultPipelineFactory`, not by
   hand in `pipeline.py`.
 - One feature implementation: live (`DataStage`) and offline code share `trader.data.indicators`
   (and `trader.data.features` once PR #10 lands). Never copy a formula.

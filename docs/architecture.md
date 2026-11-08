@@ -16,6 +16,33 @@ flowchart TD
   A --> M[(Prometheus)]
 ```
 
+## Package layout
+
+```
+src/trader/
+  core/        domain types: orders, symbols, market rules, events, clock (no futu/pandas/pydantic)
+  ports/       BrokerClient protocol and typed broker responses
+  adapters/    futu/ (equity + crypto clients, FutuMarket profiles), sim/ (paper), factory.py
+  marketdata/  quote poller and quote events
+  risk/        PreTradeRisk, portfolio state, RiskEngine, Kelly, kill switch, throttle
+  execution/   OrderManager
+  data/        live + research features, indicators, history fetcher
+  model/       signal models and the model registry
+  pipeline/    stages, IPipelineFactory, TradingPipeline
+  jobs/        scheduled jobs (daily signals)
+  research/    offline research (grid search, Monte Carlo plans); patterns/ pattern detectors
+  app/         cli, runtime (live opt-in, shutdown), health, bootstrap (composition root)
+  config.py    AppConfig schema and loader
+```
+
+Dependency rules are checked in CI by `lint-imports` (contracts in `pyproject.toml`):
+
+- `core` imports no other `trader` package and no futu, pandas or pydantic.
+- Only `app` may import `adapters` (or `app`). Everything else talks to the broker through `ports`.
+- `ports` never imports futu.
+- The live path (`app`, `pipeline`, `risk`, `execution`, `marketdata`, `ports`, `adapters`)
+  never imports `research`.
+
 ## Pipeline stages
 
 | Stage | Input | Output | Responsibility |
@@ -32,13 +59,18 @@ throughput per stage plus queue depth.
 
 ## Factory pattern
 
-`DefaultPipelineFactory` (`src/trader/pipeline/factory.py`) builds all stages from `AppConfig` and `FutuClient`. Implement `IPipelineFactory` to create custom stage configurations.
+`TradingPipeline` takes an `IPipelineFactory` (`src/trader/pipeline/factory.py`). The concrete
+`DefaultPipelineFactory` (`src/trader/app/bootstrap.py`) is the composition root: it builds every
+stage from `AppConfig` and a `BrokerClient`, creating the broker adapter itself only when none is
+given. Implement `IPipelineFactory` to create custom stage configurations.
 
-Model selection is a registry (`_model_builders`) keyed by `model.type` from config:
+Model selection is a registry (`src/trader/model/registry.py`: `build_model`, `register_model`)
+keyed by `model.type` from config:
 
-- `mean_reversion` (default) — `MeanReversionModel`
+- `mean_reversion` (default, and the fallback for unknown types) — `MeanReversionModel`
 - `ensemble` — weighted `EnsembleSignalModel` of three mean-reversion variants
-- `gradient_boosting` — lazy scikit-learn import, falls back to `mean_reversion` when unavailable
+- `gradient_boosting`, `tabular` and every `TabularModel` estimator — fitted artifacts loaded from
+  `model.path`; startup fails if the file is missing or the model needs non-live features
 
 ## Models
 
@@ -69,17 +101,33 @@ reversal, trend, oscillators, volatility, volume) are vectorised in `build_featu
 6. Concentration limit (% of portfolio)
 7. Latency budget exceeded
 
-`KellyCriterion` (`src/trader/risk/kelly_criterion.py`) computes fractional Kelly position sizing; `RiskStage` scales it by signal confidence (≥0.85 → full, ≥0.70 → 60%, below → 30%).
+`KellyCriterion` (`src/trader/risk/kelly_criterion.py`) computes fractional Kelly position sizing; `PreTradeRisk` scales it by signal confidence (≥0.85 → full, ≥0.70 → 60%, below → 30%).
 
-## API client
+`PreTradeRisk` (`src/trader/risk/pre_trade.py`) is the pre-trade risk service: kill switch, live portfolio state
+(`src/trader/risk/portfolio_state.py`, working BUY orders included), lot/step/tick rules, price band, sizing, the
+`RiskEngine` gates and the order-rate throttle. It returns an `OrderIntent` or a `Rejection(reason)`. `RiskStage`
+is only the pipeline adapter: it drops HOLD signals, calls `PreTradeRisk.check` and counts reject reasons. Code
+outside the pipeline (scheduled jobs) should call `PreTradeRisk` directly rather than re-implement any check.
 
-`FutuClient` (`src/trader/api/client.py`) wraps Futu OpenD with:
+## Broker port and adapters
+
+Risk, execution, the pipeline and the runtime depend on the `BrokerClient` protocol
+(`src/trader/ports/broker.py`) and its typed responses (`src/trader/ports/models.py`), never on
+a concrete client. `src/trader/adapters/factory.py` picks the adapter for `trading.market`.
+
+`FutuClient` (`src/trader/adapters/futu/client.py`) is the Futu adapter. Everything that differs
+between markets lives in a `FutuMarket` profile (`src/trader/adapters/futu/markets.py`):
+`EquityMarket` (whole shares, `OpenSecTradeContext`) and `CryptoMarket`
+(`src/trader/adapters/futu/crypto.py`: decimal quantities, GTC/IOC, account-currency checks,
+simulator-only outside REAL). A new market is a new profile, not a client subclass.
+
+`FutuClient` wraps Futu OpenD with:
 
 - Async context manager lifecycle
 - Bounded reconnect with exponential backoff + jitter
 - Token-bucket rate limiting
 - Heartbeat loop
-- Automatic paper-mode fallback when gateway is unavailable (simulated quotes, orders, and portfolio)
+- Paper-mode fallback when the gateway is unavailable (`PaperSimulator`, `src/trader/adapters/sim/`). Only a client allowed to fall back is given a simulator, so a live client cannot reach one.
 
 ## Data flow
 

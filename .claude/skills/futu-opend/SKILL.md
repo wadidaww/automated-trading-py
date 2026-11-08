@@ -1,20 +1,20 @@
 ---
 name: futu-opend
-description: Correct usage of Futu OpenD / futu-api in this repo — symbol format, quote subscriptions and push handlers, thread→asyncio handoff, order placement and Futu order statuses, portfolio/position queries, historical klines, rate limits, reconnection, and SIMULATE vs REAL safety. Load before touching src/trader/api, src/trader/execution, or anything that calls OpenD.
+description: Correct usage of Futu OpenD / futu-api in this repo — symbol format, quote subscriptions and push handlers, thread→asyncio handoff, order placement and Futu order statuses, portfolio/position queries, historical klines, rate limits, reconnection, and SIMULATE vs REAL safety. Load before touching src/trader/adapters, src/trader/ports, src/trader/execution, or anything that calls OpenD.
 ---
 
 # Futu OpenD integration guide
 
 The reference is https://openapi.futunn.com/futu-api-doc/. Limits and enums change between SDK
 versions, so check the docs for anything this page marks *verify*. `futu-api` is installed by Poetry
-in CI, but no OpenD runs there. Code against `trader.api.client.FutuClient` and test with
+in CI, but no OpenD runs there. Code against `trader.adapters.futu.client.FutuClient` and test with
 `tests/helpers/fakes.py`.
 
 ## Symbols
 Futu codes are `MARKET.CODE`: `HK.00700`, `US.AAPL`, `SH.600519`, `SZ.000001`, and crypto pairs
 `CC.BTCUSD` / `CC.ETHUSD`. `trader.core.symbols.normalize_symbol` (run by `TradingSettings` at
 config load) turns `700.HK` into `HK.00700`; use the canonical form everywhere after that.
-Crypto goes through `FutuCryptoClient` (`src/trader/api/crypto_client.py`), has no SIMULATE
+Crypto goes through `FutuCryptoClient` (`src/trader/adapters/futu/crypto.py`), has no SIMULATE
 environment, and must never be mixed with equity symbols in one config.
 
 ## Market data: push, don't poll

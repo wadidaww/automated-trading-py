@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trader.api.quote_handler import QuoteEvent
+from trader.marketdata.quote_handler import QuoteEvent
 from trader.data.features import (
     FEATURE_GROUPS,
     LIVE_FEATURES,

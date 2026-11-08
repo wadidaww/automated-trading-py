@@ -7,8 +7,8 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Literal
 
-from trader.runtime import build_client
-from trader.utils.config import load_config
+from trader.app.runtime import build_client
+from trader.config import load_config
 from trader.utils.logger import get_logger
 
 logger = get_logger("main")

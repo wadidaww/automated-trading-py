@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from trader.misc.types.futu import TradeSide
+from trader.core.orders import Side
 
 
 class QuoteResponse(BaseModel):
@@ -20,7 +20,7 @@ class OrderResponse(BaseModel):
     order_id: str
     status: str
     symbol: str | None = None
-    order_side: TradeSide | None = None
+    order_side: Side | None = None
     qty: float | None = None
     price: float | None = None
 
@@ -79,7 +79,7 @@ class OrderStatusResponse(BaseModel):
     order_id: str
     status: str
     symbol: str
-    order_side: TradeSide | None = None
+    order_side: Side | None = None
     qty: float = 0.0
     dealt_qty: float = 0.0
     price: float | None = None

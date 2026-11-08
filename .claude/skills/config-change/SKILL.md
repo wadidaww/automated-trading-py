@@ -1,13 +1,13 @@
 ---
 name: config-change
-description: Safely add or change a configuration field or risk/trading limit — pydantic AppConfig in src/trader/utils/config.py, the YAMLs under config/, env-var placeholders, validators, and config loading tests. Use when editing config/*.yaml, adding a setting, or changing limits.
+description: Safely add or change a configuration field or risk/trading limit — pydantic AppConfig in src/trader/config.py, the YAMLs under config/, env-var placeholders, validators, and config loading tests. Use when editing config/*.yaml, adding a setting, or changing limits.
 ---
 
 # Change configuration
 
 ## Files
 
-- Schema: `src/trader/utils/config.py` (`AppConfig` and its sections: `opend`, `trading`
+- Schema: `src/trader/config.py` (`AppConfig` and its sections: `opend`, `trading`
   (+ `trading.crypto`), `risk`, `storage`, `session`, `model`, `pipeline`, `logging`, `metrics`).
 - Configs: `config/config.dev.yaml` (currently crypto `CC.ETHUSD`), `config.crypto.dev.yaml`,
   `config.staging.yaml` and `config.prod.yaml` (HK `HK.00700`). PR #10 adds
@@ -35,7 +35,7 @@ description: Safely add or change a configuration field or risk/trading limit �
 ## Check
 
 ```bash
-for f in config/config*.yaml; do PYTHONPATH=src python -c "from trader.utils.config import load_config; load_config('$f'); print('ok', '$f')"; done
+for f in config/config*.yaml; do PYTHONPATH=src python -c "from trader.config import load_config; load_config('$f'); print('ok', '$f')"; done
 ```
 
 `${FUTU_ACCOUNT_ID}` may be unset locally; export a dummy like `FUTU_ACCOUNT_ID=0` for this check
