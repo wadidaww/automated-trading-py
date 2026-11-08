@@ -28,7 +28,8 @@ from trader.risk.throttle import OrderRateThrottle
 from trader.utils.logger import get_logger
 from trader.utils.maths import to_minor_units_ceil
 
-logger = get_logger("pre_trade_risk")
+# Same logger name as before the move, so log queries and dashboards keep matching.
+logger = get_logger("risk_stage")
 
 CONFIDENCE_SIZE_TIERS: tuple[tuple[float, float], ...] = (
     (0.85, 1.0),
