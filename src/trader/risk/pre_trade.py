@@ -195,9 +195,9 @@ class PreTradeRisk:
         symbol (it must fill or be cancelled first, so a resting order is never stacked or
         crossed); position data that cannot be trusted (non-finite quantities, a held quantity
         with no market value); and, for anything but a full exit, a portfolio worth less than
-        the position or a missing volatility. A full exit (target 0) needs no volatility. Every later check (price
-        band, per-order caps, portfolio limits, kill switch, throttle) still applies to the
-        result, so an exit can take more than one order.
+        the position or a missing volatility. Every later check (price band, per-order caps,
+        portfolio limits, kill switch, throttle) still applies to the result, so an exit can
+        take more than one order.
         """
         sizing = self._vol_target
         exposure = request.target_exposure
