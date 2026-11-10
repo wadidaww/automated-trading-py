@@ -68,14 +68,14 @@ Stages chain via typed dataclasses; each stage implements `IStage[InputT, Output
 | Type | Module | Fields |
 |------|--------|--------|
 | `QuoteEvent` | `trader.marketdata.quote_handler` | symbol, price, timestamp |
-| `FeatureWindow` | `trader.pipeline.data_stage` | symbol, price, z_score, momentum, trend_strength, volatility, rsi, bb_position, price_acceleration |
-| `TradeSignal` | `trader.pipeline.signal_stage` | symbol, signal, confidence, price |
+| `FeatureWindow` | `trader.pipeline.data_stage` | symbol, price, z_score, momentum, trend_strength, volatility, rsi, bb_position, price_acceleration; trend_return, donchian_long, realised_vol (NaN unless the trend model is configured) |
+| `TradeSignal` | `trader.pipeline.signal_stage` | symbol, signal, confidence, price; target_exposure, realised_vol (trend model only) |
 | `OrderIntent` | `trader.core.orders` (built by `trader.risk.pre_trade`) | client_order_id, symbol, side, qty, limit_price |
 | `OrderReceipt` | `trader.pipeline.execution_stage` | order_id, status |
 
 ## Features (`src/trader/data/features.py`)
 
-`window_features(prices, previous)` computes the live `DataStage` features; `live_feature_frame(close, window)` replays it over bar history for training. `build_features(bars, FeatureSpec)` builds the vectorised research groups: `momentum`, `reversal`, `trend`, `oscillators`, `volatility`, `volume`, `candles`, `channels`, `money_flow`, `stats`, `regime`, `calendar`, `live`, the extended indicator groups from `data/technical.py` (`moving_averages`, `momentum_ext`, `trend_ext`, `volatility_ext`, `volume_ext`, `support_resistance`), and the pattern groups `candle_patterns` and `chart_patterns`. `research.dataset` adds the cross-sectional `market` group.
+`window_features(prices, previous, trend=None)` computes the live `DataStage` features (plus the `TREND_FEATURES` when a `TrendSpec` is given); `live_feature_frame(close, window, trend=None)` replays it over bar history for training. `build_features(bars, FeatureSpec)` builds the vectorised research groups: `momentum`, `reversal`, `trend`, `oscillators`, `volatility`, `volume`, `candles`, `channels`, `money_flow`, `stats`, `regime`, `calendar`, `live`, the extended indicator groups from `data/technical.py` (`moving_averages`, `momentum_ext`, `trend_ext`, `volatility_ext`, `volume_ext`, `support_resistance`), and the pattern groups `candle_patterns` and `chart_patterns`. `research.dataset` adds the cross-sectional `market` group.
 
 ## Patterns (`src/trader/patterns/`)
 
@@ -101,7 +101,7 @@ Abstract interface for signal models. Implement `predict(features)`, `fit(X, y)`
 
 Implementations: `MeanReversionModel`, `EnsembleSignalModel`, `GradientBoostingModel`, `TabularModel` (LightGBM, ridge/logistic, sklearn histogram GBM), `TransformerPriceModel`.
 
-Selected via `model.type` in config through the registry in `src/trader/model/registry.py` (`build_model`, `register_model`): `mean_reversion` (default, also used for unknown types), `ensemble`, `gradient_boosting`, `tabular` and every `TabularModel` estimator. ML types load a fitted artifact from `model.path` and fail at startup if it is missing or needs non-live features.
+Selected via `model.type` in config through the registry in `src/trader/model/registry.py` (`build_model`, `register_model`): `mean_reversion` (default, also used for unknown types), `ensemble`, `trend` (rule-based, daily job only: states a target exposure that `PreTradeRisk` sizes with `risk.vol_target`), `gradient_boosting`, `tabular` and every `TabularModel` estimator. ML types load a fitted artifact from `model.path` and fail at startup if it is missing or needs non-live features.
 
 ## `OrderManager` (`src/trader/execution/order_manager.py`)
 

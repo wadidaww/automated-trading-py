@@ -17,7 +17,13 @@ from trader.pipeline.signal_stage import TradeSignal
 from trader.ports.broker import BrokerClient
 from trader.risk.kelly_criterion import KellyCriterion
 from trader.risk.kill_switch import KillSwitch
-from trader.risk.pre_trade import PreTradeLimits, PreTradeRequest, PreTradeRisk, Rejection
+from trader.risk.pre_trade import (
+    PreTradeLimits,
+    PreTradeRequest,
+    PreTradeRisk,
+    Rejection,
+    VolTargetSizing,
+)
 from trader.risk.risk_engine import RiskEngine
 from trader.risk.throttle import OrderRateThrottle
 from trader.utils.logger import get_logger
@@ -47,6 +53,7 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
         kelly: KellyCriterion | None = None,
         strategy: str = "default",
         clock: Clock | None = None,
+        vol_target: VolTargetSizing | None = None,
     ) -> None:
         self.risk = PreTradeRisk(
             engine=engine,
@@ -57,6 +64,7 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
             kelly=kelly,
             strategy=strategy,
             clock=clock,
+            vol_target=vol_target,
         )
         self.engine = engine
         self.kill_switch = kill_switch
@@ -76,7 +84,12 @@ class RiskStage(IStage[TradeSignal, OrderIntent | None]):
             return self._reject(item, "not_actionable")
         result = await self.risk.check(
             PreTradeRequest(
-                symbol=item.symbol, side=side, confidence=item.confidence, price=item.price
+                symbol=item.symbol,
+                side=side,
+                confidence=item.confidence,
+                price=item.price,
+                target_exposure=item.target_exposure,
+                realised_vol=item.realised_vol,
             )
         )
         if isinstance(result, Rejection):

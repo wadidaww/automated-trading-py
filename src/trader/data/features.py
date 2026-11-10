@@ -41,18 +41,63 @@ LIVE_FEATURES: Final[tuple[str, ...]] = (
     "bb_position",
     "price_acceleration",
 )
+# Long-window features for the trend model. Only computed when a ``TrendSpec`` is given; NaN
+# (never a neutral number) until the window is long enough, so the model holds instead of guessing.
+TREND_FEATURES: Final[tuple[str, ...]] = ("trend_return", "donchian_long", "realised_vol")
 
 
-def window_features(prices: Sequence[float], previous: Sequence[float]) -> dict[str, float]:
+@dataclass(frozen=True, slots=True)
+class TrendSpec:
+    """Lookbacks (in bars) for the trend features. Defaults suit daily crypto bars (365 a year)."""
+
+    lookbacks: tuple[int, ...] = (91, 182, 365)
+    donchian_entry: int = 55
+    donchian_exit: int = 20
+    vol_window: int = 20
+    bars_per_year: float = 365.0
+
+    @property
+    def min_points(self) -> int:
+        """Prices the window must hold before every trend feature is defined."""
+        return max(*self.lookbacks, self.donchian_entry, self.donchian_exit, self.vol_window) + 1
+
+
+def trend_features(prices: Sequence[float], spec: TrendSpec) -> dict[str, float]:
+    """Trend features for the last price in ``prices`` (oldest first), keyed by ``TREND_FEATURES``.
+
+    ``trend_return`` is the mean of the returns over ``spec.lookbacks``, ``donchian_long`` the
+    channel breakout state (1 long, 0 flat) and ``realised_vol`` the annualised volatility of the
+    last ``spec.vol_window`` returns. Each is NaN while the window is too short for it.
+    """
+    return {
+        "trend_return": indicators.blended_return(prices, spec.lookbacks),
+        "donchian_long": indicators.donchian_long(prices, spec.donchian_entry, spec.donchian_exit),
+        "realised_vol": indicators.realised_vol(prices, spec.vol_window, spec.bars_per_year),
+    }
+
+
+def window_features(
+    prices: Sequence[float], previous: Sequence[float], trend: TrendSpec | None = None
+) -> dict[str, float]:
     """Live features for the last price in ``prices`` (oldest first).
 
     Args:
         prices: Rolling price window ending with the current price.
         previous: Prices seen before the current one, oldest first (for acceleration).
+        trend: When given, the ``TREND_FEATURES`` are added.
 
     Returns:
-        Feature name to value, keyed by ``LIVE_FEATURES``; neutral values while warming up.
+        Feature name to value, keyed by ``LIVE_FEATURES`` (plus ``TREND_FEATURES`` with
+        ``trend``). While warming up the live features are neutral values and the trend
+        features NaN.
     """
+    features = _core_window_features(prices, previous)
+    if trend is not None:
+        features.update(trend_features(prices, trend))
+    return features
+
+
+def _core_window_features(prices: Sequence[float], previous: Sequence[float]) -> dict[str, float]:
     price = prices[-1]
     if len(prices) < MIN_WINDOW_POINTS:
         return {
@@ -77,11 +122,15 @@ def window_features(prices: Sequence[float], previous: Sequence[float]) -> dict[
     }
 
 
-def live_feature_frame(close: pd.Series, window: int = 100) -> pd.DataFrame:
+def live_feature_frame(
+    close: pd.Series, window: int = 100, trend: TrendSpec | None = None
+) -> pd.DataFrame:
     """Replay ``window_features`` over a close series, as ``DataStage`` would see it bar by bar.
 
-    Rows before the window holds ``MIN_WINDOW_POINTS`` prices are NaN (warm-up).
+    Rows before the window holds ``MIN_WINDOW_POINTS`` prices are NaN (warm-up). With ``trend``
+    the ``TREND_FEATURES`` columns are appended.
     """
+    columns = [*LIVE_FEATURES, *(TREND_FEATURES if trend is not None else ())]
     values = close.astype(float).to_numpy()
     rows: list[dict[str, float]] = []
     for end in range(len(values)):
@@ -90,10 +139,10 @@ def live_feature_frame(close: pd.Series, window: int = 100) -> pd.DataFrame:
         first_recorded = MIN_WINDOW_POINTS - 1
         previous = values[max(first_recorded, end - ACCELERATION_HISTORY) : end].tolist()
         if len(prices) < MIN_WINDOW_POINTS:
-            rows.append(dict.fromkeys(LIVE_FEATURES, np.nan))
+            rows.append(dict.fromkeys(columns, np.nan))
         else:
-            rows.append(window_features(prices, previous))
-    return pd.DataFrame(rows, index=close.index, columns=list(LIVE_FEATURES))
+            rows.append(window_features(prices, previous, trend))
+    return pd.DataFrame(rows, index=close.index, columns=columns)
 
 
 @dataclass(frozen=True, slots=True)

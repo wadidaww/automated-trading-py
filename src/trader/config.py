@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from datetime import date
 from pathlib import Path
@@ -29,6 +30,12 @@ class OpendConfig(BaseModel):
     # Name of the env var holding the MD5 of the trade password (REAL only). Never the value.
     unlock_password_md5_env: str = "FUTU_TRADE_PWD_MD5"  # noqa: S105 - env var name
 
+
+# ``model.type`` of the trend model, which states target positions and needs ``risk.vol_target``.
+TREND_MODEL_TYPE = "trend"
+DAILY_INTERVAL = "1d"
+DONCHIAN_WINDOW_MULTIPLE = 2
+EQUITY_CALENDAR_DAYS_PER_BAR = 1.5
 
 # Futu brokerages that offer crypto accounts (OpenCryptoTradeContext ``security_firm``).
 CRYPTO_SECURITY_FIRMS = frozenset({"FUTUSECURITIES", "FUTUINC", "FUTUSG"})
@@ -108,6 +115,23 @@ class TradingSettings(BaseModel):
         return self
 
 
+class VolTargetSettings(BaseModel):
+    """Volatility-target position sizing for models that state a target exposure (trend).
+
+    Target notional for a symbol = portfolio value x ``symbol_weight`` x the model's target
+    exposure x min(1, ``target_vol_annual`` / realised volatility). Never above ``symbol_weight``:
+    there is no leverage. Off by default; every other limit still applies when it is on.
+    """
+
+    enabled: bool = False
+    target_vol_annual: float = Field(default=0.60, gt=0, le=2.0)
+    # Largest share of the portfolio one symbol may hold under this sizing.
+    symbol_weight: float = Field(default=0.10, gt=0, le=1.0)
+    # Do not trade while the position is within this share of the symbol's budget of the target
+    # (a full exit always trades). Stops daily dust orders.
+    rebalance_band: float = Field(default=0.10, ge=0, lt=1.0)
+
+
 class RiskSettings(BaseModel):
     """Per-order limits, throttle and kill switch. Money values are account-currency major units.
 
@@ -123,6 +147,7 @@ class RiskSettings(BaseModel):
     allow_short: bool = False
     kill_switch_file: str = "run/KILL"
     cancel_on_exit: bool = True
+    vol_target: VolTargetSettings = Field(default_factory=VolTargetSettings)
 
     @model_validator(mode="after")
     def _check_limits(self) -> RiskSettings:
@@ -159,6 +184,32 @@ class DailySignalSettings(BaseModel):
     state_file: str = "data/state/daily_signals.json"
 
 
+class TrendSettings(BaseModel):
+    """Lookbacks, in bars, for ``model.type: trend``. Defaults suit daily crypto bars.
+
+    For HK daily bars use ``lookbacks: [63, 126, 252]`` and ``bars_per_year: 252``.
+    """
+
+    lookbacks: list[int] = Field(default_factory=lambda: [91, 182, 365], min_length=1)
+    donchian_entry: int = Field(default=55, gt=1)
+    donchian_exit: int = Field(default=20, gt=1)
+    vol_window: int = Field(default=20, gt=1)
+    bars_per_year: float = Field(default=365.0, gt=0)
+
+    @field_validator("lookbacks")
+    @classmethod
+    def _check_lookbacks(cls, value: list[int]) -> list[int]:
+        """Every lookback is a positive number of bars."""
+        if any(lookback <= 0 for lookback in value):
+            raise ValueError("model.trend.lookbacks must be positive")
+        return value
+
+    @property
+    def min_points(self) -> int:
+        """Prices the data window must hold before every trend feature is defined."""
+        return max(*self.lookbacks, self.donchian_entry, self.donchian_exit, self.vol_window) + 1
+
+
 class ModelSettings(BaseModel):
     """Model config."""
 
@@ -166,6 +217,7 @@ class ModelSettings(BaseModel):
     path: str
     hot_reload: bool
     confidence_threshold: float
+    trend: TrendSettings = Field(default_factory=TrendSettings)
 
 
 class PipelineSettings(BaseModel):
@@ -205,6 +257,36 @@ class AppConfig(BaseSettings):
     session: SessionSettings = Field(default_factory=SessionSettings)
     daily: DailySignalSettings = Field(default_factory=DailySignalSettings)
     model_config = SettingsConfigDict(env_file=".env")
+
+    @model_validator(mode="after")
+    def _check_trend_model(self) -> AppConfig:
+        """The trend model fails at startup, not at order time, when its config cannot work."""
+        if self.model.type != TREND_MODEL_TYPE:
+            return self
+        sizing = self.risk.vol_target
+        if not sizing.enabled:
+            raise ValueError("model.type 'trend' requires risk.vol_target.enabled: true")
+        if sizing.symbol_weight > self.trading.concentration_limit_pct:
+            raise ValueError(
+                "risk.vol_target.symbol_weight must not exceed trading.concentration_limit_pct"
+            )
+        trend = self.model.trend
+        # The Donchian state is replayed over the window from a flat start, so the window must
+        # be well past the entry lookback or the vote drops when the breakout bar slides out.
+        need = max(trend.min_points, DONCHIAN_WINDOW_MULTIPLE * trend.donchian_entry)
+        if self.pipeline.data_window_size < need:
+            raise ValueError(f"model.type 'trend' needs pipeline.data_window_size >= {need}")
+        # Lookbacks are counted in daily bars; on the tick pipeline they would mean minutes.
+        if self.pipeline.feature_interval != DAILY_INTERVAL:
+            raise ValueError("model.type 'trend' needs pipeline.feature_interval: '1d'")
+        # history_days is calendar days; equity markets trade about 5 days in 7, with holidays.
+        per_bar = 1.0 if self.trading.market == CRYPTO_MARKET else EQUITY_CALENDAR_DAYS_PER_BAR
+        days = math.ceil(self.pipeline.data_window_size * per_bar)
+        if self.daily.history_days < days:
+            raise ValueError(
+                f"daily.history_days must be >= {days} to cover pipeline.data_window_size"
+            )
+        return self
 
 
 def load_config(path: str) -> AppConfig:

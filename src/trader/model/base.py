@@ -25,6 +25,9 @@ class Prediction:
     signal: Signal
     confidence: float
     metadata: dict[str, Any]
+    # Fraction (0 to 1) of the symbol's risk budget the model wants held, for models that state a
+    # target position instead of a one-off trade. None for every other model.
+    target_exposure: float | None = None
 
 
 class ISignalModel(ABC):

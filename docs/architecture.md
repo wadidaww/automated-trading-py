@@ -68,6 +68,7 @@ Model selection is a registry (`src/trader/model/registry.py`: `build_model`, `r
 keyed by `model.type` from config:
 
 - `mean_reversion` (default, and the fallback for unknown types) — `MeanReversionModel`
+- `trend` — `TrendFollowingModel`: blended 3/6/12-month return plus a Donchian vote on daily bars. It states a target exposure; `PreTradeRisk` sizes it by volatility (`risk.vol_target`) and trades the gap to the current position. Daily signal job only (`config/config.crypto.trend.yaml`)
 - `ensemble` — weighted `EnsembleSignalModel` of three mean-reversion variants
 - `gradient_boosting`, `tabular` and every `TabularModel` estimator — fitted artifacts loaded from
   `model.path`; startup fails if the file is missing or the model needs non-live features

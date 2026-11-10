@@ -22,6 +22,10 @@ class PortfolioState:
     daily_pnl_minor: int
     open_orders: int
     can_sell_qty: float
+    # For target-position sizing, which must know what is held and what is already on its way.
+    symbol_qty: float = 0.0
+    symbol_market_value_minor: int = 0
+    symbol_working_orders: int = 0
 
 
 async def load_portfolio_state(client: BrokerClient, symbol: str) -> PortfolioState:
@@ -59,4 +63,7 @@ async def load_portfolio_state(client: BrokerClient, symbol: str) -> PortfolioSt
         daily_pnl_minor=to_minor_units(daily_pnl),
         open_orders=len(working),
         can_sell_qty=symbol_pos.can_sell_qty if symbol_pos else 0,
+        symbol_qty=symbol_pos.quantity if symbol_pos else 0.0,
+        symbol_market_value_minor=to_minor_units(symbol_pos.market_value) if symbol_pos else 0,
+        symbol_working_orders=sum(1 for o in working if o.symbol == symbol),
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 
 
@@ -65,3 +66,49 @@ def acceleration(previous: Sequence[float], current: float) -> float:
     if len(previous) < 2:
         return 0.0
     return (current - previous[-1]) - (previous[-1] - previous[-2])
+
+
+def blended_return(prices: Sequence[float], lookbacks: Sequence[int]) -> float:
+    """Mean of the simple returns over each lookback (in bars); NaN until the longest one exists."""
+    if not lookbacks or len(prices) <= max(lookbacks):
+        return math.nan
+    total = 0.0
+    for lookback in lookbacks:
+        base = prices[-1 - lookback]
+        if base <= 0:
+            return math.nan
+        total += prices[-1] / base - 1
+    return total / len(lookbacks)
+
+
+def donchian_long(prices: Sequence[float], entry: int, exit_: int) -> float:
+    """Donchian channel state replayed over the window: 1.0 long, 0.0 flat, NaN if too short.
+
+    Goes long when a close exceeds the highest of the previous ``entry`` closes and flat when a
+    close falls below the lowest of the previous ``exit_`` closes. The replay starts flat at the
+    first bar that has ``entry`` closes before it, so the window must be much longer than
+    ``entry`` for the state to match a replay over the full history.
+    """
+    if entry <= 0 or exit_ <= 0 or len(prices) <= max(entry, exit_):
+        return math.nan
+    long = False
+    for i in range(max(entry, exit_), len(prices)):
+        price = prices[i]
+        if not long and price > max(prices[i - entry : i]):
+            long = True
+        elif long and price < min(prices[i - exit_ : i]):
+            long = False
+    return 1.0 if long else 0.0
+
+
+def realised_vol(prices: Sequence[float], window: int, bars_per_year: float) -> float:
+    """Annualised sample standard deviation of the last ``window`` simple returns; NaN if short."""
+    if window < 2 or len(prices) < window + 1:
+        return math.nan
+    tail = prices[-window - 1 :]
+    if any(price <= 0 for price in tail):
+        return math.nan
+    returns = [curr / prev - 1 for prev, curr in zip(tail, tail[1:], strict=False)]
+    centre = sum(returns) / window
+    variance = sum((r - centre) ** 2 for r in returns) / (window - 1)
+    return math.sqrt(variance * bars_per_year)
