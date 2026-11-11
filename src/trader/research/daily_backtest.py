@@ -198,7 +198,8 @@ def simulate(
     eq = pd.Series(equity, index=close.index, name="equity")
     weight = pd.Series(weights, index=close.index, name="weight")
     if start is not None:
-        eq, weight, close, target = (x.loc[start:] for x in (eq, weight, close, target))
+        keep = close.index >= pd.Timestamp(start)
+        eq, weight, close, target = (x[keep] for x in (eq, weight, close, target))
     stats = _stats(eq, weight, close, orders, paid, initial_equity)
     return BacktestResult(equity=eq, weight=weight, target=target, stats=stats)
 
