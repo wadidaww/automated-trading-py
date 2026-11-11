@@ -61,6 +61,10 @@ class VolTargetSizing:
     symbol_weight: float
     rebalance_band: float = 0.0
 
+    def vol_scale(self, realised_vol: float) -> float:
+        """Share of the symbol's budget to hold at ``realised_vol`` (> 0); never above 1."""
+        return min(1.0, self.target_vol_annual / realised_vol)
+
 
 @dataclass(frozen=True, slots=True)
 class TargetOrder:
@@ -227,7 +231,7 @@ class PreTradeRisk:
             return Rejection("zero_portfolio_value")
         if state.portfolio_value_minor < state.symbol_notional_minor:
             return Rejection("implausible_portfolio_value")
-        vol_scale = min(1.0, sizing.target_vol_annual / vol)
+        vol_scale = sizing.vol_scale(vol)
         budget_minor = state.portfolio_value_minor * sizing.symbol_weight
         target_minor = int(budget_minor * exposure * vol_scale)
         gap_minor = target_minor - state.symbol_notional_minor

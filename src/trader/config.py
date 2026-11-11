@@ -33,6 +33,9 @@ class OpendConfig(BaseModel):
 
 # ``model.type`` of the trend model, which states target positions and needs ``risk.vol_target``.
 TREND_MODEL_TYPE = "trend"
+SMA_TREND_MODEL_TYPE = "sma_trend"
+# Models that state a target exposure from daily bars and are sized by ``risk.vol_target``.
+TARGET_MODEL_TYPES = frozenset({TREND_MODEL_TYPE, SMA_TREND_MODEL_TYPE})
 DAILY_INTERVAL = "1d"
 DONCHIAN_WINDOW_MULTIPLE = 2
 EQUITY_CALENDAR_DAYS_PER_BAR = 1.5
@@ -185,9 +188,10 @@ class DailySignalSettings(BaseModel):
 
 
 class TrendSettings(BaseModel):
-    """Lookbacks, in bars, for ``model.type: trend``. Defaults suit daily crypto bars.
+    """Lookbacks, in bars, for ``model.type: trend`` and ``sma_trend``. Defaults suit daily crypto.
 
     For HK daily bars use ``lookbacks: [63, 126, 252]`` and ``bars_per_year: 252``.
+    ``sma_window`` is the moving average ``sma_trend`` compares the close with.
     """
 
     lookbacks: list[int] = Field(default_factory=lambda: [91, 182, 365], min_length=1)
@@ -195,6 +199,7 @@ class TrendSettings(BaseModel):
     donchian_exit: int = Field(default=20, gt=1)
     vol_window: int = Field(default=20, gt=1)
     bars_per_year: float = Field(default=365.0, gt=0)
+    sma_window: int = Field(default=200, gt=1)
 
     @field_validator("lookbacks")
     @classmethod
@@ -208,6 +213,11 @@ class TrendSettings(BaseModel):
     def min_points(self) -> int:
         """Prices the data window must hold before every trend feature is defined."""
         return max(*self.lookbacks, self.donchian_entry, self.donchian_exit, self.vol_window) + 1
+
+    @property
+    def sma_min_points(self) -> int:
+        """Prices the data window must hold for ``sma_trend``: the average and the volatility."""
+        return max(self.sma_window, self.vol_window + 1)
 
 
 class ModelSettings(BaseModel):
@@ -260,25 +270,35 @@ class AppConfig(BaseSettings):
 
     @model_validator(mode="after")
     def _check_trend_model(self) -> AppConfig:
-        """The trend model fails at startup, not at order time, when its config cannot work."""
-        if self.model.type != TREND_MODEL_TYPE:
+        """Target-exposure models fail at startup, not at order time, on an unworkable config."""
+        if self.model.type not in TARGET_MODEL_TYPES:
             return self
         sizing = self.risk.vol_target
         if not sizing.enabled:
-            raise ValueError("model.type 'trend' requires risk.vol_target.enabled: true")
+            raise ValueError(
+                f"model.type '{self.model.type}' requires risk.vol_target.enabled: true"
+            )
         if sizing.symbol_weight > self.trading.concentration_limit_pct:
             raise ValueError(
                 "risk.vol_target.symbol_weight must not exceed trading.concentration_limit_pct"
             )
         trend = self.model.trend
-        # The Donchian state is replayed over the window from a flat start, so the window must
-        # be well past the entry lookback or the vote drops when the breakout bar slides out.
-        need = max(trend.min_points, DONCHIAN_WINDOW_MULTIPLE * trend.donchian_entry)
+        if self.model.type == SMA_TREND_MODEL_TYPE:
+            need = trend.sma_min_points
+        else:
+            # The Donchian state is replayed over the window from a flat start, so the window
+            # must be well past the entry lookback or the vote drops when the breakout bar
+            # slides out.
+            need = max(trend.min_points, DONCHIAN_WINDOW_MULTIPLE * trend.donchian_entry)
         if self.pipeline.data_window_size < need:
-            raise ValueError(f"model.type 'trend' needs pipeline.data_window_size >= {need}")
+            raise ValueError(
+                f"model.type '{self.model.type}' needs pipeline.data_window_size >= {need}"
+            )
         # Lookbacks are counted in daily bars; on the tick pipeline they would mean minutes.
         if self.pipeline.feature_interval != DAILY_INTERVAL:
-            raise ValueError("model.type 'trend' needs pipeline.feature_interval: '1d'")
+            raise ValueError(
+                f"model.type '{self.model.type}' needs pipeline.feature_interval: '1d'"
+            )
         # history_days is calendar days; equity markets trade about 5 days in 7, with holidays.
         per_bar = 1.0 if self.trading.market == CRYPTO_MARKET else EQUITY_CALENDAR_DAYS_PER_BAR
         days = math.ceil(self.pipeline.data_window_size * per_bar)

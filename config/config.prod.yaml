@@ -26,7 +26,7 @@ risk:
   allow_short: false
   kill_switch_file: "run/KILL"
   cancel_on_exit: true
-  vol_target:  # sizing for target-position models (model.type: trend); off by default
+  vol_target:  # sizing for target-position models (trend, sma_trend); off by default
     enabled: false
     target_vol_annual: 0.60
     symbol_weight: 0.10  # largest share of the portfolio per symbol; must be <= concentration_limit_pct
@@ -36,12 +36,13 @@ model:
   path: "data/models/model.pkl"
   hot_reload: false
   confidence_threshold: 0.60
-  trend:  # only read by model.type: trend; lookbacks in bars (HK daily: [63, 126, 252], bars_per_year 252)
+  trend:  # only read by model.type: trend / sma_trend; lookbacks in bars (HK daily: [63, 126, 252], bars_per_year 252)
     lookbacks: [91, 182, 365]
     donchian_entry: 55
     donchian_exit: 20
     vol_window: 20
     bars_per_year: 365
+    sma_window: 200  # bars; the average sma_trend compares the close with
 pipeline:
   data_window_size: 120
   feature_interval: "5m"

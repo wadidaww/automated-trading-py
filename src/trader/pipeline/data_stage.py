@@ -36,6 +36,7 @@ class FeatureWindow:
     trend_return: float = math.nan
     donchian_long: float = math.nan
     realised_vol: float = math.nan
+    sma_gap: float = math.nan
 
 
 class DataStage(IStage[QuoteEvent, FeatureWindow]):
@@ -95,6 +96,7 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
                 trend_return=_loggable(features.trend_return),
                 donchian_long=_loggable(features.donchian_long),
                 realised_vol=_loggable(features.realised_vol),
+                sma_gap=_loggable(features.sma_gap),
             )
         return features
 

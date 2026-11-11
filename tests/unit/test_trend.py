@@ -34,7 +34,9 @@ from trader.pipeline.data_stage import DataStage
 from trader.pipeline.signal_stage import SignalStage
 from trader.research.synthetic import synthetic_bars
 
-SPEC = TrendSpec(lookbacks=(10, 20, 40), donchian_entry=8, donchian_exit=4, vol_window=5)
+SPEC = TrendSpec(
+    lookbacks=(10, 20, 40), donchian_entry=8, donchian_exit=4, vol_window=5, sma_window=30
+)
 TREND_CONFIG = "config/config.crypto.trend.yaml"
 STAMP = datetime(2026, 11, 6, tzinfo=UTC)
 

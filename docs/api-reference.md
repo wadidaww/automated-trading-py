@@ -68,8 +68,8 @@ Stages chain via typed dataclasses; each stage implements `IStage[InputT, Output
 | Type | Module | Fields |
 |------|--------|--------|
 | `QuoteEvent` | `trader.marketdata.quote_handler` | symbol, price, timestamp |
-| `FeatureWindow` | `trader.pipeline.data_stage` | symbol, price, z_score, momentum, trend_strength, volatility, rsi, bb_position, price_acceleration; trend_return, donchian_long, realised_vol (NaN unless the trend model is configured) |
-| `TradeSignal` | `trader.pipeline.signal_stage` | symbol, signal, confidence, price; target_exposure, realised_vol (trend model only) |
+| `FeatureWindow` | `trader.pipeline.data_stage` | symbol, price, z_score, momentum, trend_strength, volatility, rsi, bb_position, price_acceleration; trend_return, donchian_long, realised_vol, sma_gap (NaN unless a trend model is configured) |
+| `TradeSignal` | `trader.pipeline.signal_stage` | symbol, signal, confidence, price; target_exposure, realised_vol (trend models only) |
 | `OrderIntent` | `trader.core.orders` (built by `trader.risk.pre_trade`) | client_order_id, symbol, side, qty, limit_price |
 | `OrderReceipt` | `trader.pipeline.execution_stage` | order_id, status |
 
@@ -101,7 +101,7 @@ Abstract interface for signal models. Implement `predict(features)`, `fit(X, y)`
 
 Implementations: `MeanReversionModel`, `EnsembleSignalModel`, `GradientBoostingModel`, `TabularModel` (LightGBM, ridge/logistic, sklearn histogram GBM), `TransformerPriceModel`.
 
-Selected via `model.type` in config through the registry in `src/trader/model/registry.py` (`build_model`, `register_model`): `mean_reversion` (default, also used for unknown types), `ensemble`, `trend` (rule-based, daily job only: states a target exposure that `PreTradeRisk` sizes with `risk.vol_target`), `gradient_boosting`, `tabular` and every `TabularModel` estimator. ML types load a fitted artifact from `model.path` and fail at startup if it is missing or needs non-live features.
+Selected via `model.type` in config through the registry in `src/trader/model/registry.py` (`build_model`, `register_model`): `mean_reversion` (default, also used for unknown types), `ensemble`, `trend` and `sma_trend` (rule-based, daily job only: they state a target exposure that `PreTradeRisk` sizes with `risk.vol_target`; `sma_trend` holds while the close is above its `model.trend.sma_window` average), `gradient_boosting`, `tabular` and every `TabularModel` estimator. ML types load a fitted artifact from `model.path` and fail at startup if it is missing or needs non-live features.
 
 ## `OrderManager` (`src/trader/execution/order_manager.py`)
 

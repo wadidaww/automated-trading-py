@@ -43,7 +43,12 @@ LIVE_FEATURES: Final[tuple[str, ...]] = (
 )
 # Long-window features for the trend model. Only computed when a ``TrendSpec`` is given; NaN
 # (never a neutral number) until the window is long enough, so the model holds instead of guessing.
-TREND_FEATURES: Final[tuple[str, ...]] = ("trend_return", "donchian_long", "realised_vol")
+TREND_FEATURES: Final[tuple[str, ...]] = (
+    "trend_return",
+    "donchian_long",
+    "realised_vol",
+    "sma_gap",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,10 +60,11 @@ class TrendSpec:
     donchian_exit: int = 20
     vol_window: int = 20
     bars_per_year: float = 365.0
+    sma_window: int = 200
 
     @property
     def min_points(self) -> int:
-        """Prices the window must hold before every trend feature is defined."""
+        """Prices the window must hold before the ``trend`` model's features are defined."""
         return max(*self.lookbacks, self.donchian_entry, self.donchian_exit, self.vol_window) + 1
 
 
@@ -66,13 +72,15 @@ def trend_features(prices: Sequence[float], spec: TrendSpec) -> dict[str, float]
     """Trend features for the last price in ``prices`` (oldest first), keyed by ``TREND_FEATURES``.
 
     ``trend_return`` is the mean of the returns over ``spec.lookbacks``, ``donchian_long`` the
-    channel breakout state (1 long, 0 flat) and ``realised_vol`` the annualised volatility of the
-    last ``spec.vol_window`` returns. Each is NaN while the window is too short for it.
+    channel breakout state (1 long, 0 flat), ``realised_vol`` the annualised volatility of the
+    last ``spec.vol_window`` returns and ``sma_gap`` the last price over its ``spec.sma_window``
+    average, minus 1. Each is NaN while the window is too short for it.
     """
     return {
         "trend_return": indicators.blended_return(prices, spec.lookbacks),
         "donchian_long": indicators.donchian_long(prices, spec.donchian_entry, spec.donchian_exit),
         "realised_vol": indicators.realised_vol(prices, spec.vol_window, spec.bars_per_year),
+        "sma_gap": indicators.sma_gap(prices, spec.sma_window),
     }
 
 

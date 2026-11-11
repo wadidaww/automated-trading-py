@@ -81,6 +81,20 @@ def blended_return(prices: Sequence[float], lookbacks: Sequence[int]) -> float:
     return total / len(lookbacks)
 
 
+def sma_gap(prices: Sequence[float], window: int) -> float:
+    """Last price over the mean of the last ``window`` prices, minus 1.
+
+    NaN until ``window`` prices exist, and NaN when any of them is non-finite or not positive: a
+    bad print must give no signal, never an exit or an entry.
+    """
+    if window <= 0 or len(prices) < window:
+        return math.nan
+    tail = prices[-window:]
+    if any(not math.isfinite(price) or price <= 0 for price in tail):
+        return math.nan
+    return prices[-1] / (sum(tail) / window) - 1
+
+
 def donchian_long(prices: Sequence[float], entry: int, exit_: int) -> float:
     """Donchian channel state replayed over the window: 1.0 long, 0.0 flat, NaN if too short.
 

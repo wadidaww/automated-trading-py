@@ -27,7 +27,7 @@ from trader.risk.kelly_criterion import KellyCriterion
 from trader.risk.kill_switch import KillSwitch
 from trader.risk.risk_engine import RiskEngine
 from trader.risk.throttle import OrderRateThrottle
-from trader.config import TREND_MODEL_TYPE, AppConfig, RiskSettings
+from trader.config import TARGET_MODEL_TYPES, AppConfig, RiskSettings
 from trader.data.features import LIVE_FEATURES, TREND_FEATURES, TrendSpec
 from trader.utils.logger import get_logger
 from trader.utils.maths import to_minor_units
@@ -79,8 +79,8 @@ class DefaultPipelineFactory(IPipelineFactory):
         return DataStage(window_size=window_size, trend=trend)
 
     def _trend_spec(self) -> TrendSpec | None:
-        """Trend feature lookbacks, only when the configured model is the trend model."""
-        if self._config is None or self._config.model.type != TREND_MODEL_TYPE:
+        """Trend feature lookbacks, only when the configured model states a target exposure."""
+        if self._config is None or self._config.model.type not in TARGET_MODEL_TYPES:
             return None
         trend = self._config.model.trend
         return TrendSpec(
@@ -89,6 +89,7 @@ class DefaultPipelineFactory(IPipelineFactory):
             donchian_exit=trend.donchian_exit,
             vol_window=trend.vol_window,
             bars_per_year=trend.bars_per_year,
+            sma_window=trend.sma_window,
         )
 
     def create_signal_stage(self) -> SignalStage:
@@ -97,8 +98,8 @@ class DefaultPipelineFactory(IPipelineFactory):
         Supports model types:
         - "mean_reversion": Enhanced mean reversion with momentum confirmation
         - "ensemble": Weighted ensemble of mean reversion models
-        - "trend": Rule-based trend following; states a target exposure sized by
-          ``risk.vol_target`` in the risk stage
+        - "trend", "sma_trend": Rule-based trend following; they state a target exposure sized
+          by ``risk.vol_target`` in the risk stage
         - "gradient_boosting", "tabular" and every ``TabularModel`` estimator: fitted artifacts
           loaded from ``model.path``; startup fails if the artifact is missing
         """
@@ -113,7 +114,7 @@ class DefaultPipelineFactory(IPipelineFactory):
             confidence_threshold=threshold,
         )
         columns = (
-            (*LIVE_FEATURES, *TREND_FEATURES) if model_type == TREND_MODEL_TYPE else LIVE_FEATURES
+            (*LIVE_FEATURES, *TREND_FEATURES) if model_type in TARGET_MODEL_TYPES else LIVE_FEATURES
         )
         return SignalStage(model, confidence_threshold=threshold, feature_columns=columns)
 
