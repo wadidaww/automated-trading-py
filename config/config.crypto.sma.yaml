@@ -1,0 +1,78 @@
+# Bitcoin 200-day trend rule (model.type: sma_trend), for the daily signal job:
+#   python -m trader --daily-signals --dry-run --config config/config.crypto.sma.yaml
+# Hold BTC while its daily close is above its 200-day average, otherwise hold cash. On real prices
+# this is the one crypto rule that passed the acceptance gate on both the design years (to 2021)
+# and the holdout (2022 to Nov 2026); ETH rules did not pass, so ETH is not traded here.
+# Dry-run and paper only (trd_env stays SIMULATE). Limits are USD and match config.crypto.dev.yaml.
+# The local paper simulator keeps no positions, so a paper run buys again every session while BTC
+# is above its average and can never show an exit: judge this config by its --dry-run decisions
+# until a stateful paper account exists.
+# Evidence and its limits (research on Coinbase bars, outside this repo): docs/strategy-research.md.
+# Crypto has no Futu SIMULATE: --mode paper runs on the local simulator (trading.crypto.paper_*).
+# --mode live needs trd_env: REAL, TRADER_LIVE_CONFIRM=1, FUTU_SECURITY_FIRM and futu-api >= 10.5.6508.
+opend:
+  host: "127.0.0.1"
+  port: 11111
+  heartbeat_interval_s: 10
+  reconnect_max_attempts: 5
+  rate_limit_requests: 300
+  rate_limit_window_s: 30
+trading:
+  account_id: "${FUTU_ACCOUNT_ID}"
+  market: "CC"
+  trd_env: "SIMULATE"  # REAL also needs --mode live and TRADER_LIVE_CONFIRM=1
+  symbols: ["CC.BTCUSD"]
+  order_type: "LIMIT"
+  max_position_notional: 5000
+  max_portfolio_notional: 50000
+  max_daily_loss: 1000
+  max_open_orders: 5
+  concentration_limit_pct: 0.25
+  signal_cooldown_s: 45
+  crypto:
+    security_firm: "${FUTU_SECURITY_FIRM}"  # FUTUSECURITIES | FUTUINC | FUTUSG (REAL only)
+    qty_step: 0.0001  # must match the precision the account accepts for the pair
+    min_qty: 0.0001
+    paper_base_price: 2000.0
+    paper_price_tick: 0.01
+    paper_cash: 100000.0
+risk:
+  max_order_qty: 1.0
+  max_order_notional: 2000
+  max_orders_per_second: 2
+  max_orders_per_30s: 12  # Futu allows ~15 place_order per 30 s
+  price_band_pct: 0.02
+  allow_short: false  # crypto is spot only
+  kill_switch_file: "run/KILL"
+  cancel_on_exit: true
+  vol_target:  # sizing for target-position models (trend, sma_trend); off by default
+    enabled: true
+    target_vol_annual: 2.0  # the tested rule has no volatility scaling; 2.0 only bites above 200% a year
+    symbol_weight: 0.04  # largest share of the portfolio per symbol; must be <= concentration_limit_pct
+    rebalance_band: 0.10
+model:
+  type: "sma_trend"
+  path: "data/models/model.pkl"
+  hot_reload: false
+  confidence_threshold: 0.60
+  trend:  # only read by model.type: trend / sma_trend; lookbacks in bars (HK daily: [63, 126, 252], bars_per_year 252)
+    lookbacks: [91, 182, 365]
+    donchian_entry: 55
+    donchian_exit: 20
+    vol_window: 20
+    bars_per_year: 365
+    sma_window: 200  # bars; the average sma_trend compares the close with
+pipeline:
+  data_window_size: 220  # covers the 200-bar average
+  feature_interval: "1d"
+  queue_maxsize: 1000
+daily:
+  history_days: 260
+  state_file: "data/state/daily_signals_sma.json"
+logging:
+  level: "info"
+  format: "json"
+  file: "logs/trader.log"
+  rotate_bytes: 104857600
+metrics:
+  prometheus_port: 9090

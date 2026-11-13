@@ -14,12 +14,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from trader.config import ModelSettings
+from trader.config import SMA_TREND_MODEL_TYPE, TREND_MODEL_TYPE, ModelSettings
 from trader.data.features import LIVE_FEATURES
 from trader.model.base import ISignalModel
 from trader.model.ensemble import EnsembleSignalModel
 from trader.model.mean_reversion import MeanReversionModel
 from trader.model.tabular import ESTIMATORS as TABULAR_ESTIMATORS
+from trader.model.sma_trend import SmaTrendModel
+from trader.model.trend import TrendFollowingModel
 
 type ModelBuilder = Callable[[ModelSettings | None], ISignalModel]
 
@@ -61,6 +63,16 @@ def _ensemble(_settings: ModelSettings | None) -> ISignalModel:
     return ensemble
 
 
+def _sma_trend(_settings: ModelSettings | None) -> ISignalModel:
+    """Rule-based moving-average trend model; its window is ``model.trend.sma_window``."""
+    return SmaTrendModel()
+
+
+def _trend(_settings: ModelSettings | None) -> ISignalModel:
+    """Rule-based trend model; its lookbacks live in ``model.trend`` and feed ``DataStage``."""
+    return TrendFollowingModel()
+
+
 def _gradient_boosting(settings: ModelSettings | None) -> ISignalModel:
     """Load the fitted sklearn gradient boosting classifier from ``model.path``."""
     from trader.model.gradient_boosting import GradientBoostingModel
@@ -89,6 +101,8 @@ def _tabular(model_type: str, settings: ModelSettings | None) -> ISignalModel:
 _BUILDERS: dict[str, ModelBuilder] = {
     DEFAULT_MODEL_TYPE: _mean_reversion,
     "ensemble": _ensemble,
+    TREND_MODEL_TYPE: _trend,
+    SMA_TREND_MODEL_TYPE: _sma_trend,
     "gradient_boosting": _gradient_boosting,
     **{name: functools.partial(_tabular, name) for name in (*TABULAR_ESTIMATORS, "tabular")},
 }

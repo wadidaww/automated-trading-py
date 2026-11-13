@@ -16,7 +16,7 @@ from trader.marketdata.quote_poller import QuotePoller
 from trader.ports.broker import BrokerClient
 from trader.pipeline.pipeline import TradingPipeline
 from trader.risk.kill_switch import KillSwitch
-from trader.config import AppConfig, load_config
+from trader.config import TARGET_MODEL_TYPES, AppConfig, load_config
 from trader.utils.logger import get_logger
 
 logger = get_logger("main")
@@ -176,6 +176,11 @@ async def run(mode: str, duration: int, config_path: str) -> None:
     config = load_config(config_path)
     logger.info("config_loaded", config_path=config_path, mode=mode)
     check_live_opt_in(config, mode)
+    if config.model.type in TARGET_MODEL_TYPES:
+        raise SystemExit(
+            f"model.type '{config.model.type}' trades daily bars: run it with --daily-signals, "
+            "not the tick pipeline"
+        )
 
     async with build_client(config, mode) as client:
         if mode == "live":

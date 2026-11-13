@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict, deque
 from dataclasses import dataclass
 
-from trader.data.features import ACCELERATION_HISTORY, MIN_WINDOW_POINTS, window_features
+from trader.data.features import (
+    ACCELERATION_HISTORY,
+    MIN_WINDOW_POINTS,
+    TrendSpec,
+    window_features,
+)
 from trader.marketdata.quote_handler import QuoteEvent
 from trader.pipeline.base import IStage
 from trader.utils.logger import get_logger
@@ -26,17 +32,24 @@ class FeatureWindow:
     rsi: float = 50.0
     bb_position: float = 0.5
     price_acceleration: float = 0.0
+    # Trend features: NaN unless the stage has a TrendSpec and the window is long enough.
+    trend_return: float = math.nan
+    donchian_long: float = math.nan
+    realised_vol: float = math.nan
+    sma_gap: float = math.nan
 
 
 class DataStage(IStage[QuoteEvent, FeatureWindow]):
     """Convert raw quotes to feature windows over a per-symbol rolling price window.
 
     Features come from ``trader.data.features.window_features``, the same function training uses
-    (via ``live_feature_frame``), so live and offline features cannot drift apart.
+    (via ``live_feature_frame``), so live and offline features cannot drift apart. The long-window
+    trend features are only computed when a ``TrendSpec`` is given.
     """
 
-    def __init__(self, window_size: int = 100) -> None:
+    def __init__(self, window_size: int = 100, trend: TrendSpec | None = None) -> None:
         self._window_size = window_size
+        self._trend = trend
         self._prices: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=window_size))
         self._prev_prices: dict[str, deque[float]] = defaultdict(
             lambda: deque(maxlen=ACCELERATION_HISTORY)
@@ -60,7 +73,7 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
 
         prices = list(window)
         features = FeatureWindow(
-            symbol=item.symbol, price=item.price, **window_features(prices, previous)
+            symbol=item.symbol, price=item.price, **window_features(prices, previous, self._trend)
         )
         previous.append(item.price)
         logger.info(
@@ -76,4 +89,18 @@ class DataStage(IStage[QuoteEvent, FeatureWindow]):
             bb_position=round(features.bb_position, 4),
             price_acceleration=round(features.price_acceleration, 4),
         )
+        if self._trend is not None:
+            logger.info(
+                "trend_features_computed",
+                symbol=item.symbol,
+                trend_return=_loggable(features.trend_return),
+                donchian_long=_loggable(features.donchian_long),
+                realised_vol=_loggable(features.realised_vol),
+                sma_gap=_loggable(features.sma_gap),
+            )
         return features
+
+
+def _loggable(value: float) -> float | None:
+    """Rounded value for the JSON log; None for NaN (bare NaN is not valid JSON)."""
+    return round(value, 4) if math.isfinite(value) else None

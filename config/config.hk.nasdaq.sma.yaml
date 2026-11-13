@@ -1,0 +1,66 @@
+# Nasdaq-100 200-day trend rule on the HK-listed ETF 2834 (model.type: sma_trend), daily job:
+#   python -m trader --daily-signals --dry-run --config config/config.hk.nasdaq.sma.yaml
+# Hold the ETF while its daily close is above its 200-day average, otherwise hold cash. The rule
+# passed the acceptance gate on QQQ (same index, 1999 to 2019 design, 2020 to Nov 2026 holdout) and
+# on 2834 itself over the holdout; 2834 lists too recently to have a design period of its own.
+# Paper only: trd_env stays SIMULATE. Limits are HKD and match config.staging.yaml.
+# Evidence and its limits (research on Yahoo bars, outside this repo): docs/strategy-research.md.
+opend:
+  host: "127.0.0.1"
+  port: 11111
+  heartbeat_interval_s: 10
+  reconnect_max_attempts: 5
+  rate_limit_requests: 300
+  rate_limit_window_s: 30
+trading:
+  account_id: "${FUTU_ACCOUNT_ID}"
+  market: "HK"
+  trd_env: "SIMULATE"  # REAL also needs --mode live and TRADER_LIVE_CONFIRM=1
+  symbols: ["HK.02834"]
+  order_type: "LIMIT"
+  max_position_notional: 75000
+  max_portfolio_notional: 750000
+  max_daily_loss: 15000
+  max_open_orders: 15
+  concentration_limit_pct: 0.25
+  signal_cooldown_s: 45
+risk:
+  max_order_qty: 2000
+  max_order_notional: 50000
+  max_orders_per_second: 2
+  max_orders_per_30s: 10  # Futu allows ~15 place_order per 30 s
+  price_band_pct: 0.02
+  allow_short: false
+  kill_switch_file: "run/KILL"
+  cancel_on_exit: true
+  vol_target:  # sizing for target-position models (trend, sma_trend); off by default
+    enabled: true
+    target_vol_annual: 2.0  # the tested rule has no volatility scaling
+    symbol_weight: 0.07  # x a HKD 1,000,000 paper account = HKD 70,000, inside max_position_notional_hkd
+    rebalance_band: 0.10
+model:
+  type: "sma_trend"
+  path: "data/models/model.pkl"
+  hot_reload: false
+  confidence_threshold: 0.60
+  trend:  # only read by model.type: trend / sma_trend; lookbacks in bars (HK daily: [63, 126, 252], bars_per_year 252)
+    lookbacks: [63, 126, 252]
+    donchian_entry: 55
+    donchian_exit: 20
+    vol_window: 20
+    bars_per_year: 246
+    sma_window: 200  # bars; the average sma_trend compares the close with
+pipeline:
+  data_window_size: 260  # covers the 200-bar average
+  feature_interval: "1d"
+  queue_maxsize: 1000
+daily:
+  history_days: 420  # calendar days; about 1.5 per HK trading day
+  state_file: "data/state/daily_signals_hk_nasdaq.json"
+logging:
+  level: "info"
+  format: "json"
+  file: "logs/trader.log"
+  rotate_bytes: 104857600
+metrics:
+  prometheus_port: 9090

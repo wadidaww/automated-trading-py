@@ -8,6 +8,7 @@ values.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from trader.core.clock import Clock, WallClock
@@ -49,6 +50,34 @@ class PreTradeLimits:
 
 
 @dataclass(frozen=True, slots=True)
+class VolTargetSizing:
+    """Volatility-target sizing for requests that carry a target exposure.
+
+    Target notional = portfolio value x ``symbol_weight`` x target exposure x
+    min(1, ``target_vol_annual`` / realised volatility). The scale never exceeds 1: no leverage.
+    """
+
+    target_vol_annual: float
+    symbol_weight: float
+    rebalance_band: float = 0.0
+
+    def vol_scale(self, realised_vol: float) -> float:
+        """Share of the symbol's budget to hold at ``realised_vol`` (> 0); never above 1."""
+        return min(1.0, self.target_vol_annual / realised_vol)
+
+
+@dataclass(frozen=True, slots=True)
+class TargetOrder:
+    """The trade that moves a symbol towards its target: side and notional to trade.
+
+    ``notional_minor`` None means a full exit: sell what is sellable, within the per-order caps.
+    """
+
+    side: Side
+    notional_minor: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class Instrument:
     """Order-validity rules for one symbol: quantity step (lot), minimum and tick."""
 
@@ -65,6 +94,11 @@ class PreTradeRequest:
     side: Side
     confidence: float
     price: float
+    # Target-position requests (trend model): wanted share (0 to 1) of the symbol's budget and the
+    # annualised realised volatility to size it with. ``side`` is then only the model's intent;
+    # the order side comes from the gap between the target and the current position.
+    target_exposure: float | None = None
+    realised_vol: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,9 +111,10 @@ class Rejection:
 class PreTradeRisk:
     """Pre-trade risk gate.
 
-    Order of checks: kill switch → valid price → live state → lot size → tick rounding and
-    price band against a fresh broker snapshot → sizing (Kelly, lot, max qty/notional, sellable
-    qty) → portfolio limits → kill switch again (it may have tripped during the broker calls) →
+    Order of checks: kill switch → valid price → live state → lot size → target position (only
+    for requests with a target exposure) → tick rounding and price band against a fresh broker
+    snapshot → sizing (Kelly or the gap to the target, lot, max qty/notional, sellable qty) →
+    portfolio limits → kill switch again (it may have tripped during the broker calls) →
     order-rate throttle. The first failing check decides the reject reason. A daily-loss breach
     trips the (latched) kill switch.
     """
@@ -94,8 +129,10 @@ class PreTradeRisk:
         kelly: KellyCriterion | None = None,
         strategy: str = "default",
         clock: Clock | None = None,
+        vol_target: VolTargetSizing | None = None,
     ) -> None:
         self.engine = engine
+        self._vol_target = vol_target
         self._client = client
         self._limits = limits
         self.kill_switch = kill_switch
@@ -145,7 +182,74 @@ class PreTradeRisk:
             return instrument
         if info.price <= 0:
             return Rejection("no_reference_price")
-        return self._evaluate(request, request.side, state, instrument, info.price)
+        if request.target_exposure is None:
+            return self._evaluate(request, request.side, state, instrument, info.price)
+        target = self._target_order(request, state)
+        if isinstance(target, Rejection):
+            return target
+        return self._evaluate(request, target.side, state, instrument, info.price, target)
+
+    def _target_order(
+        self, request: PreTradeRequest, state: PortfolioState
+    ) -> TargetOrder | Rejection:
+        """The trade from the current position to the target, or why there is none.
+
+        Fails closed. Rejected: sizing switched off; a target outside [0, 1]; a side that does
+        not match the target (SELL means target 0, BUY means above 0); any working order for the
+        symbol (it must fill or be cancelled first, so a resting order is never stacked or
+        crossed); position data that cannot be trusted (non-finite quantities, a held quantity
+        with no market value); and, for anything but a full exit, a portfolio worth less than
+        the position or a missing volatility. Every later check (price band, per-order caps,
+        portfolio limits, kill switch, throttle) still applies to the result, so an exit can
+        take more than one order.
+        """
+        sizing = self._vol_target
+        exposure = request.target_exposure
+        if sizing is None:
+            return Rejection("target_sizing_disabled")
+        if exposure is None or not math.isfinite(exposure) or not 0.0 <= exposure <= 1.0:
+            return Rejection("invalid_target")
+        if (request.side == "SELL") != (exposure == 0):
+            return Rejection("invalid_target")
+        if state.symbol_working_orders > 0:
+            return Rejection("working_order_pending")
+        if not math.isfinite(state.symbol_qty) or not math.isfinite(state.can_sell_qty):
+            return Rejection("state_unavailable")
+        if state.symbol_qty > 0 and state.symbol_market_value_minor <= 0:
+            return Rejection("no_position_value")
+        if exposure == 0:
+            if state.can_sell_qty <= 0:
+                return Rejection("at_target")
+            logger.info(
+                "vol_target_sizing", symbol=request.symbol, target_exposure=0.0, side="SELL"
+            )
+            return TargetOrder("SELL", None)
+        vol = request.realised_vol
+        if vol is None or not math.isfinite(vol) or vol <= 0:
+            return Rejection("no_volatility")
+        if state.portfolio_value_minor <= 0:
+            return Rejection("zero_portfolio_value")
+        if state.portfolio_value_minor < state.symbol_notional_minor:
+            return Rejection("implausible_portfolio_value")
+        vol_scale = sizing.vol_scale(vol)
+        budget_minor = state.portfolio_value_minor * sizing.symbol_weight
+        target_minor = int(budget_minor * exposure * vol_scale)
+        gap_minor = target_minor - state.symbol_notional_minor
+        side: Side = "BUY" if gap_minor > 0 else "SELL"
+        logger.info(
+            "vol_target_sizing",
+            symbol=request.symbol,
+            target_exposure=exposure,
+            realised_vol=round(vol, 4),
+            vol_scale=round(vol_scale, 4),
+            target_notional_minor=target_minor,
+            symbol_notional_minor=state.symbol_notional_minor,
+            gap_minor=gap_minor,
+            side=side,
+        )
+        if gap_minor == 0 or abs(gap_minor) < sizing.rebalance_band * budget_minor:
+            return Rejection("within_rebalance_band")
+        return TargetOrder(side, abs(gap_minor))
 
     @staticmethod
     def _instrument(symbol: str, info: StockInfoResponse) -> Instrument | Rejection:
@@ -173,6 +277,7 @@ class PreTradeRisk:
         state: PortfolioState,
         instrument: Instrument,
         reference_price: float,
+        target: TargetOrder | None = None,
     ) -> OrderIntent | Rejection:
         """Price, size and gate one actionable signal against a live snapshot."""
         limit_price = round_to_tick(request.symbol, request.price, side, instrument.tick)
@@ -194,7 +299,7 @@ class PreTradeRisk:
             deviation_pct=round(deviation * 100, 4),
             price_band_pct=round(self._limits.price_band_pct * 100, 4),
         )
-        qty = self._size(request, side, state, limit_price, instrument)
+        qty = self._size(request, side, state, limit_price, instrument, target)
         logger.info(
             "risk_sized",
             symbol=request.symbol,
@@ -266,27 +371,29 @@ class PreTradeRisk:
         state: PortfolioState,
         limit_price: float,
         instrument: Instrument,
+        target: TargetOrder | None = None,
     ) -> float:
-        """Quantity after Kelly sizing and every per-order cap, on the instrument's lot/step.
+        """Quantity after sizing and every per-order cap, on the instrument's lot/step.
 
-        0 means do not trade. Equities size in whole lots; crypto in decimal steps.
+        Sizing is Kelly on the confidence, or the gap to the target position when ``target`` is
+        given. 0 means do not trade. Equities size in whole lots; crypto in decimal steps.
         """
         price_minor = to_minor_units_ceil(limit_price)
-        if price_minor <= 0 or request.confidence <= 0 or state.portfolio_value_minor <= 0:
+        if price_minor <= 0 or state.portfolio_value_minor <= 0:
             return 0
-        kelly_fraction = self._kelly_fraction(request.confidence)
-        if kelly_fraction <= 0:
+        # Confidence only sizes Kelly orders; a target order is sized by its gap.
+        if target is None and request.confidence <= 0:
             return 0
-        multiplier = self._size_multiplier(request.confidence)
-        budget = int(state.portfolio_value_minor * kelly_fraction * multiplier)
-        logger.info(
-            "kelly_sizing",
-            symbol=request.symbol,
-            confidence=round(request.confidence, 4),
-            kelly_fraction=round(kelly_fraction, 4),
-            size_multiplier=multiplier,
-            budget_minor=budget,
-        )
+        if target is None:
+            budget = self._kelly_budget(request, state)
+        elif target.notional_minor is None:
+            # Full exit: everything sellable, still under the per-order caps below, so a large
+            # position leaves over several orders.
+            budget = math.ceil(state.can_sell_qty * price_minor)
+        else:
+            budget = target.notional_minor
+        if budget <= 0:
+            return 0
         fractional = rules_for(request.symbol).fractional_qty
         if fractional:
             qty = min(
@@ -305,6 +412,23 @@ class PreTradeRisk:
         if fractional:
             return round_down_to_step(qty, instrument.step)
         return float(round_down_to_lot(qty, int(instrument.step)))
+
+    def _kelly_budget(self, request: PreTradeRequest, state: PortfolioState) -> int:
+        """Order budget in minor units from Kelly sizing on the signal confidence."""
+        kelly_fraction = self._kelly_fraction(request.confidence)
+        if kelly_fraction <= 0:
+            return 0
+        multiplier = self._size_multiplier(request.confidence)
+        budget = int(state.portfolio_value_minor * kelly_fraction * multiplier)
+        logger.info(
+            "kelly_sizing",
+            symbol=request.symbol,
+            confidence=round(request.confidence, 4),
+            kelly_fraction=round(kelly_fraction, 4),
+            size_multiplier=multiplier,
+            budget_minor=budget,
+        )
+        return budget
 
     def _kelly_fraction(self, confidence: float) -> float:
         """Derive the Kelly fraction for a signal confidence value."""

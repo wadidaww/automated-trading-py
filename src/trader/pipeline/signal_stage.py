@@ -27,6 +27,10 @@ class TradeSignal:
     signal: Signal
     confidence: float
     price: float
+    # Set by target-position models (trend): the wanted share of the symbol's risk budget and the
+    # realised volatility the risk stage sizes it with.
+    target_exposure: float | None = None
+    realised_vol: float | None = None
 
 
 class SignalStage(IStage[FeatureWindow, TradeSignal | None]):
@@ -41,8 +45,12 @@ class SignalStage(IStage[FeatureWindow, TradeSignal | None]):
         model: ISignalModel,
         confidence_threshold: float = 0.65,
         cooldown_seconds: float = 60.0,
+        feature_columns: tuple[str, ...] = FEATURE_COLUMNS,
     ) -> None:
         self.model = model
+        # Models fitted on the live features must see exactly those columns; only the trend
+        # model's stage adds the trend features.
+        self._feature_columns = feature_columns
         self.confidence_threshold = confidence_threshold
         self._cooldown_seconds = cooldown_seconds
         self._last_signal_time: dict[str, float] = {}
@@ -59,7 +67,7 @@ class SignalStage(IStage[FeatureWindow, TradeSignal | None]):
             )
             return None
 
-        features = pd.DataFrame({name: [getattr(item, name)] for name in FEATURE_COLUMNS})
+        features = pd.DataFrame({name: [getattr(item, name)] for name in self._feature_columns})
         prediction = self.model.predict(features)
         logger.info(
             "prediction",
@@ -85,4 +93,6 @@ class SignalStage(IStage[FeatureWindow, TradeSignal | None]):
             signal=prediction.signal,
             confidence=prediction.confidence,
             price=item.price,
+            target_exposure=prediction.target_exposure,
+            realised_vol=item.realised_vol if prediction.target_exposure is not None else None,
         )
